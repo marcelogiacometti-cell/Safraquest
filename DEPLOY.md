@@ -5,11 +5,11 @@ Precisa de: um Postgres, um lugar para rodar o Next.js e um agendador que chame 
 ## Opção recomendada: Railway (app + Postgres + cron no mesmo lugar)
 1. Crie um projeto, adicione **PostgreSQL** e faça deploy deste repositório (usa o `Dockerfile`).
 2. Variáveis do app: `DATABASE_URL` (referência ao Postgres), `SESSION_SECRET` (`openssl rand -hex 32`), `APP_URL` (domínio público com https), `CRON_SECRET` (outro valor aleatório), `WHATSAPP_PROVIDER=console` por enquanto.
-3. Rode uma vez, no terminal do serviço: `ADMIN_EMAIL=... ADMIN_PASSWORD=... npm run db:bootstrap` — aplica as migrações, cria os 8 modelos de mensagem e o usuário Marketing.
+3. Defina também `ADMIN_EMAIL` e `ADMIN_PASSWORD`. Ao iniciar, o app aplica as migrações, cria os 8 modelos de mensagem e o usuário Marketing sozinho (não precisa de terminal).
 4. Em Cron Jobs: a cada 10 min, `curl -fsS -H "Authorization: Bearer $CRON_SECRET" $APP_URL/api/cron/dispatch`.
 
 ## Alternativa: Vercel + Neon
-Banco no Neon; app na Vercel; `vercel.json` já traz o cron. **Atenção:** o plano Hobby só aceita cron diário. Use o plano Pro ou chame o endereço acima de um agendador externo (ex.: cron-job.org) a cada 10 min. Rode `npm run db:bootstrap` da sua máquina com `DATABASE_URL` apontando para o Neon.
+Banco no Neon; app na Vercel; `vercel.json` já traz o cron. **Atenção:** o plano Hobby só aceita cron diário. Use o plano Pro ou chame o endereço acima de um agendador externo (ex.: cron-job.org) a cada 10 min. Defina `ADMIN_EMAIL`/`ADMIN_PASSWORD`; o app prepara o banco ao iniciar.
 
 ## Ligar o WhatsApp (Meta)
 1. No Meta Business, crie o app WhatsApp e anote **WABA ID**, **Phone Number ID**, **token permanente** (usuário do sistema) e **App Secret**.

@@ -17,5 +17,5 @@ COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/package.json ./package.json
 EXPOSE 3000
-# Migrações rodam no deploy: `npm run db:migrate` (ver DEPLOY.md)
+# Migrações e criação do usuário Marketing rodam sozinhas ao iniciar (src/instrumentation.ts)
 CMD ["node", "server.js"]
