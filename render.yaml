@@ -1,0 +1,48 @@
+# Blueprint da Render: cria app, banco e agendador de uma vez.
+databases:
+  - name: safraquest-db
+    plan: basic-256mb
+
+services:
+  - type: web
+    name: safraquest
+    runtime: docker
+    plan: starter
+    healthCheckPath: /entrar
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: safraquest-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      - key: WHATSAPP_PROVIDER
+        value: console
+      - key: ADMIN_NAME
+        value: Marketing
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: APP_URL
+        sync: false
+
+  - type: cron
+    name: safraquest-agendador
+    runtime: docker
+    plan: starter
+    schedule: "*/10 * * * *"
+    dockerCommand: sh -c 'wget -qO- --header="Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/dispatch"'
+    envVars:
+      - key: CRON_SECRET
+        fromService:
+          type: web
+          name: safraquest
+          envVarKey: CRON_SECRET
+      - key: APP_URL
+        fromService:
+          type: web
+          name: safraquest
+          envVarKey: APP_URL
