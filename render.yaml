@@ -26,23 +26,21 @@ services:
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
-      - key: APP_URL
-        sync: false
 
   - type: cron
     name: safraquest-agendador
     runtime: docker
     plan: starter
     schedule: "*/10 * * * *"
-    dockerCommand: "sh -c 'wget -qO- --header=\"Authorization: Bearer $CRON_SECRET\" \"$APP_URL/api/cron/dispatch\"'"
+    dockerCommand: "sh -c 'wget -qO- --header=\"Authorization: Bearer $CRON_SECRET\" \"http://$APP_HOSTPORT/api/cron/dispatch\"'"
     envVars:
       - key: CRON_SECRET
         fromService:
           type: web
           name: safraquest
           envVarKey: CRON_SECRET
-      - key: APP_URL
+      - key: APP_HOSTPORT
         fromService:
           type: web
           name: safraquest
-          envVarKey: APP_URL
+          property: hostport
