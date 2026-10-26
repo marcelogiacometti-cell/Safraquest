@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db';
@@ -33,3 +33,12 @@ export async function requirePanel(roles?: string[]): Promise<{ user: NonNullabl
 }
 export const fmtDate = (d: Date | string) => new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(d));
 export const firstName = (n: string) => n.split(' ')[0];
+
+/** Endereço público a partir da requisição (não depende de variável configurada). */
+export async function baseUrl() {
+  const h = await headers();
+  const host = h.get('x-forwarded-host') ?? h.get('host');
+  if (!host) return process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
+  const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https');
+  return `${proto}://${host}`;
+}

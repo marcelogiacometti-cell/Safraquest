@@ -40,9 +40,10 @@ export async function cadastrar(_: unknown, fd: FormData) {
   const r = await registerViaInvite({
     token: String(fd.get('token')), name: String(fd.get('nome') ?? ''), whatsapp: String(fd.get('tel') ?? ''),
     unitId: (fd.get('unidade') as string) || null, consent: fd.get('aceite') === 'on',
+    email: String(fd.get('email') ?? ''), password: String(fd.get('senha') ?? ''),
   });
   if (!r.ok) {
-    const m: Record<string, string> = { NAME: 'Informe nome e sobrenome.', PHONE: 'WhatsApp inválido.', CONSENT: 'É preciso aceitar receber as mensagens para participar.', DUPLICATE: 'Esse número já está cadastrado.', UNIT: 'Escolha a sua unidade.', INVITE: 'Este link não está mais disponível.', EMAIL: 'E-mail inválido.', PASSWORD: 'Senha fraca.' };
+    const m: Record<string, string> = { NAME: 'Informe nome e sobrenome.', PHONE: 'WhatsApp inválido.', CONSENT: 'É preciso aceitar receber as mensagens para participar.', DUPLICATE: 'Esse número já está cadastrado.', UNIT: 'Escolha a sua unidade.', INVITE: 'Este link não está mais disponível.', EMAIL: 'E-mail inválido.', PASSWORD: 'A senha precisa ter pelo menos 8 caracteres.' };
     return { error: m[r.reason] };
   }
   redirect('/pendente');

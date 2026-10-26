@@ -307,3 +307,32 @@ describe('webhook da Meta', () => {
     expect(reply.replies).toBe(1);
   });
 });
+
+describe('links para gestor e representante', () => {
+  it('só o Marketing gera link de gestor/representante; gestor cadastra com e-mail e senha', async () => {
+    const m = w.actor(w.marketing);
+    const g = await createInvite(m, { role: 'GESTOR', distributorId: w.alfa.d.id, days: 7 });
+    const sem = await registerViaInvite({ token: g.token, name: 'Gestor Alfa', whatsapp: '54999991000', consent: false });
+    expect(sem).toMatchObject({ ok: false, reason: 'EMAIL' });
+    const curta = await registerViaInvite({ token: g.token, name: 'Gestor Alfa', whatsapp: '54999991000', consent: false, email: 'g@alfa.test', password: '123' });
+    expect(curta).toMatchObject({ ok: false, reason: 'PASSWORD' });
+    const ok = await registerViaInvite({ token: g.token, name: 'Gestor Alfa', whatsapp: '54999991000', consent: false, email: 'G@Alfa.test', password: 'senha-do-gestor' });
+    expect(ok.ok).toBe(true);
+    expect((await panelLogin('g@alfa.test', 'senha-do-gestor')).ok).toBe(false); // ainda pendente
+    await approveUser(m, (ok as { userId: string }).userId);
+    expect((await panelLogin('g@alfa.test', 'senha-do-gestor')).ok).toBe(true);
+    await expect(createInvite(w.actor(w.gestor), { role: 'REPRESENTANTE' })).rejects.toThrow(AdminError);
+  });
+  it('representante: link sem distribuidor, aprovação e carteira', async () => {
+    const m = w.actor(w.marketing);
+    const r = await createInvite(m, { role: 'REPRESENTANTE', days: 7 });
+    const ok = await registerViaInvite({ token: r.token, name: 'Rita Representante', whatsapp: '54999992000', consent: true });
+    expect(ok.ok).toBe(true);
+    const uid = (ok as { userId: string }).userId;
+    await approveUser(m, uid);
+    const { setRepPortfolio } = await import('@/lib/admin');
+    await setRepPortfolio(uid, [w.alfa.d.id, w.beta.d.id]);
+    expect((await db.select().from(schema.repAssignments).where(eq(schema.repAssignments.userId, uid))).length).toBe(2);
+    expect((await requestLoginCode('54999992000')).ok).toBe(true);
+  });
+});

@@ -234,7 +234,7 @@ export async function approveUser(actor: Actor, userId: string) {
   const [tpl] = await db.select().from(schema.waTemplates).where(eq(schema.waTemplates.name, 'cadastro_aprovado'));
   if (u.whatsapp && u.consentAt && tpl?.status === 'APPROVED') {
     const p = await getProvider();
-    notified = (await p.sendTemplate(u.whatsapp, 'cadastro_aprovado', [u.name.split(' ')[0], `${env.appUrl}/entrar`])).ok;
+    notified = (await p.sendTemplate(u.whatsapp, 'cadastro_aprovado', [u.name.split(' ')[0], `${env.appUrl}${u.role === 'GESTOR' ? '/painel/login' : '/entrar'}`])).ok;
   }
   return { notified };
 }

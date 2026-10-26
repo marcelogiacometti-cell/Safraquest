@@ -2,7 +2,7 @@
 import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db';
-import { requirePanel } from '@/lib/web';
+import { requirePanel, baseUrl } from '@/lib/web';
 import * as admin from '@/lib/admin';
 import { resolveReport, type ReportAction } from '@/lib/reports';
 import { closeApuracao, publishWinners } from '@/lib/winners';
@@ -22,9 +22,9 @@ export async function recusar(fd: FormData) { const { actor } = await requirePan
 export async function gerarConvite(_: unknown, fd: FormData) {
   const { actor } = await requirePanel();
   const r = await wrap(() => admin.createInvite(actor, {
-    role: s(fd, 'papel') as never, distributorId: s(fd, 'dist') || actor.distributorId, unitId: s(fd, 'unidade') || null,
+    role: (s(fd, 'papel') || 'VENDEDOR') as never, distributorId: s(fd, 'dist') || actor.distributorId, unitId: s(fd, 'unidade') || null,
     days: Number(s(fd, 'dias') || 7), maxUses: s(fd, 'usos') ? Number(s(fd, 'usos')) : null }));
-  return r.error ? r : { ok: `Link: ${r.data!.url}` };
+  return r.error ? r : { ok: `Link: ${await baseUrl()}/cadastro/${r.data!.token}` };
 }
 
 export async function criarCampanha(_: unknown, fd: FormData) {
@@ -87,4 +87,15 @@ export async function sincronizarModelos() {
   const p = await getProvider(); const list = await p.listTemplates();
   for (const t of list) await db.update(schema.waTemplates).set({ status: mapTemplateStatus(t.status) }).where(eq(schema.waTemplates.name, t.name));
   revalidatePath('/painel/integracao');
+}
+
+export async function definirCarteira(fd: FormData) {
+  await requirePanel(['MARKETING']);
+  await wrap(() => admin.setRepPortfolio(s(fd, 'id'), fd.getAll('dists').map(String)));
+  revalidatePath('/painel/usuarios');
+}
+export async function desativar(fd: FormData) {
+  const { actor } = await requirePanel(['MARKETING']);
+  await wrap(() => admin.deactivateUser(actor, s(fd, 'id')));
+  revalidatePath('/painel/usuarios');
 }
