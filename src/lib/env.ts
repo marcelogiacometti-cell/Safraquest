@@ -7,5 +7,6 @@ export const env = {
   },
   get cronSecret() { return process.env.CRON_SECRET ?? ''; },
   get waProvider() { return process.env.WHATSAPP_PROVIDER ?? 'console'; },
+  get smtpHost() { return process.env.SMTP_HOST ?? ''; },
   get graphVersion() { return process.env.WHATSAPP_GRAPH_VERSION ?? 'v21.0'; },
 };

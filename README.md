@@ -1,6 +1,6 @@
 # SafraQuest
 
-Quiz semanal gamificado para vendedores de cooperativas e revendas. O aviso vai pelo WhatsApp (Meta Cloud API) e o quiz roda no navegador.
+Quiz semanal gamificado para vendedores de cooperativas e revendas. O aviso e o código de acesso vão por e-mail (SMTP) e o quiz roda no navegador.
 
 ```
 npm install
@@ -9,7 +9,7 @@ createdb safraquest             # Postgres 16
 npm run db:migrate && npm run db:seed && npm run db:demo
 npm run dev                     # http://localhost:3000
 ```
-Painel: `mkt@corteva.test` / `senha-forte-123` (só no seed de desenvolvimento). Sem Meta configurada, os códigos e mensagens aparecem no terminal (`[whatsapp:console]`).
+Painel: `mkt@corteva.test` / `senha-forte-123` (só no seed de desenvolvimento). Sem SMTP configurado, os e-mails aparecem no terminal (`[whatsapp:console]`).
 
 - `npm test` — testes (usa o banco `safraquest_test`)
 - `npm run db:generate` — gera migração após mudar `src/db/schema.ts`

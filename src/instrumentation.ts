@@ -6,7 +6,7 @@ export async function register() {
     const { runMigrations } = await import('./db/migrate');
     const { bootstrap } = await import('./lib/bootstrap');
     await runMigrations();
-    const r = await bootstrap({ adminEmail: process.env.ADMIN_EMAIL, adminPassword: process.env.ADMIN_PASSWORD, adminName: process.env.ADMIN_NAME });
+    const r = await bootstrap({ adminEmail: process.env.ADMIN_EMAIL, adminPassword: process.env.ADMIN_PASSWORD, adminName: process.env.ADMIN_NAME, approveAllTemplates: process.env.WHATSAPP_PROVIDER !== 'meta' });
     console.log('[safraquest] banco pronto.', r.adminId ? 'Usuário Marketing ok.' : 'Defina ADMIN_EMAIL e ADMIN_PASSWORD para criar o primeiro usuário.');
   } catch (e) { console.error('[safraquest] falha ao preparar o banco:', e); }
 }

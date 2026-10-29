@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db';
 import { AdminError, saveQuestion } from './admin';
-import { getProvider } from './whatsapp/provider';
+import { getProvider, contactOf } from './whatsapp/provider';
 
 export type ReportKindIn = 'ERROR' | 'CONFUSING' | 'OUTDATED' | 'OTHER' | 'SUGGESTION';
 
@@ -33,8 +33,8 @@ async function notify(userIds: string[], text: string): Promise<number> {
   const p = await getProvider();
   let n = 0;
   for (const u of users) {
-    if (!u.whatsapp || !u.consentAt || u.optOutAt || !u.notifyOptIn) continue;
-    if ((await p.sendTemplate(u.whatsapp, 'aviso_correcao', [u.name.split(' ')[0], text])).ok) n++;
+    if (!contactOf(u) || !u.consentAt || u.optOutAt || !u.notifyOptIn) continue;
+    if ((await p.sendTemplate(contactOf(u)!, 'aviso_correcao', [u.name.split(' ')[0], text])).ok) n++;
   }
   return n;
 }

@@ -5,7 +5,7 @@ import { env } from './env';
 import { inSendWindow, momentFireAt } from './schedule';
 import { signToken } from './session';
 import { syncCampaignStatuses } from './quiz';
-import { getConfig, getProvider } from './whatsapp/provider';
+import { getConfig, getProvider, contactOf } from './whatsapp/provider';
 
 export type DispatchReport = {
   sent: number; skipped: number; failed: number; blocked: string[]; windowClosed: boolean; moments: number;
@@ -26,7 +26,7 @@ async function recipientsOfCampaign(campaignId: string) {
 }
 
 export function canReceive(u: typeof schema.users.$inferSelect, now: Date): boolean {
-  if (!u.whatsapp || !u.consentAt || u.optOutAt || !u.notifyOptIn) return false;
+  if (!contactOf(u) || !u.consentAt || u.optOutAt || !u.notifyOptIn) return false;
   if (u.pausedUntil && u.pausedUntil > now) return false;
   return true;
 }
@@ -95,7 +95,7 @@ export async function dispatchDue(now = new Date()): Promise<DispatchReport> {
           const token = await signToken({ uid: u.id, kind: 'magic', mid: m.id }, Math.max(3600, Math.floor((m.closesAt.getTime() - now.getTime()) / 1000) + 86_400));
           const first = u.name.split(' ')[0];
           const params = paramsFor(mo, first, c.productName, magicLinkPath(token));
-          const res = await provider.sendTemplate(u.whatsapp!, mo.templateName, params);
+          const res = await provider.sendTemplate(contactOf(u)!, mo.templateName, params);
           if (res.ok) {
             await db.update(schema.messageLogs).set({ status: 'SENT', waMessageId: res.id, sentAt: new Date() }).where(eq(schema.messageLogs.id, row.id));
             report.sent++;

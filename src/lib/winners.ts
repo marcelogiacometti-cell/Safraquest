@@ -2,7 +2,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { db, schema } from '@/db';
 import { AdminError } from './admin';
 import { activeSellers, loadAttemptScores, orgNames, rankPeople, standByGroup, totalsByUser } from './stats';
-import { getProvider } from './whatsapp/provider';
+import { getProvider, contactOf } from './whatsapp/provider';
 
 export type WinnerRow = { id: string; name: string; org: string; value: number };
 
@@ -102,7 +102,7 @@ export async function publishWinners(campaignId: string) {
   let notified = 0;
   if (tpl?.status === 'APPROVED') {
     const prov = await getProvider();
-    for (const u of users) if (u.whatsapp && u.consentAt && !u.optOutAt && (await prov.sendTemplate(u.whatsapp, 'vencedores_campanha', [u.name.split(' ')[0]])).ok) notified++;
+    for (const u of users) if (contactOf(u) && u.consentAt && !u.optOutAt && (await prov.sendTemplate(contactOf(u)!, 'vencedores_campanha', [u.name.split(' ')[0]])).ok) notified++;
   }
   await db.update(schema.closures).set({ publishedAt: new Date() }).where(eq(schema.closures.id, cl.id));
   return { notified, winners: users.length };

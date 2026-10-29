@@ -11,12 +11,14 @@ Precisa de: um Postgres, um lugar para rodar o Next.js e um agendador que chame 
 ## Alternativa: Vercel + Neon
 Banco no Neon; app na Vercel; `vercel.json` já traz o cron. **Atenção:** o plano Hobby só aceita cron diário. Use o plano Pro ou chame o endereço acima de um agendador externo (ex.: cron-job.org) a cada 10 min. Defina `ADMIN_EMAIL`/`ADMIN_PASSWORD`; o app prepara o banco ao iniciar.
 
-## Ligar o WhatsApp (Meta)
-1. No Meta Business, crie o app WhatsApp e anote **WABA ID**, **Phone Number ID**, **token permanente** (usuário do sistema) e **App Secret**.
-2. No painel: **Integração** → preencha e salve (token e segredo ficam criptografados).
-3. Na Meta: Webhooks → URL `APP_URL/api/webhooks/whatsapp`, token de verificação = o que aparece em Integração, assine `messages`.
-4. Cadastre os 8 modelos no Gerenciador do WhatsApp **com o mesmo nome** (textos em Integração → Ver textos). O código de acesso é categoria *Authentication*; os demais *Utility*. Aguarde aprovação.
-5. Troque `WHATSAPP_PROVIDER=meta`, reinicie e clique em **Sincronizar status** em Integração.
+## Ligar o e-mail (grátis)
+O acesso (código de 6 dígitos) e os avisos semanais vão por e-mail via SMTP. Escolha um provedor:
+- **Brevo** (300 e-mails/dia): crie conta, valide o e-mail remetente em *Remetentes*, gere uma chave em *SMTP e API*. `SMTP_HOST=smtp-relay.brevo.com`, `SMTP_PORT=587`, `SMTP_USER` = login SMTP mostrado, `SMTP_PASS` = a chave, `MAIL_FROM="SafraQuest <e-mail validado>"`.
+- **Gmail** (cerca de 500/dia): ative a verificação em 2 etapas e crie uma *senha de app*. `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_USER` = seu Gmail, `SMTP_PASS` = a senha de app.
+
+Defina as variáveis no servidor e reinicie. No painel, **E-mail → Enviar e-mail de teste** confirma que chegou. Cada e-mail traz o link *Parar de receber*.
+
+> O envio por WhatsApp (Meta) continua no código, desligado. Para usá-lo no futuro, defina `WHATSAPP_PROVIDER=meta` e siga o roteiro da Meta; os modelos passam a depender de aprovação.
 
 ## Segurança já embutida
-Cookies httpOnly/sameSite; sessão de 30 dias (vendedor) e 12 h (painel); código de 6 dígitos com 10 min, 3 tentativas e 3 pedidos/15 min; assinatura HMAC no webhook; segredos AES-256-GCM; cada tela confere o papel no servidor.
+Cookies httpOnly/sameSite; sessão de 30 dias (vendedor) e 12 h (painel); código de 6 dígitos com 10 min, 3 tentativas e 3 pedidos/15 min; segredos AES-256-GCM; cada tela confere o papel no servidor.

@@ -99,3 +99,10 @@ export async function desativar(fd: FormData) {
   await wrap(() => admin.deactivateUser(actor, s(fd, 'id')));
   revalidatePath('/painel/usuarios');
 }
+
+export async function enviarTeste() {
+  const { user } = await requirePanel(['MARKETING']);
+  const p = await getProvider();
+  const r = await p.sendTemplate(user.email!, 'cadastro_aprovado', [user.name.split(' ')[0], await baseUrl() + '/entrar']);
+  return r.ok ? { ok: 'E-mail de teste enviado. Confira a caixa de entrada e o spam.' } : { error: 'Falhou: ' + r.error };
+}

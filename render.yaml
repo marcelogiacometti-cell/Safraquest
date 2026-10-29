@@ -20,6 +20,16 @@ services:
         generateValue: true
       - key: WHATSAPP_PROVIDER
         value: console
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        sync: false
       - key: ADMIN_NAME
         value: Marketing
       - key: ADMIN_EMAIL

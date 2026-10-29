@@ -19,7 +19,7 @@ export async function freshWorld() {
   const beta = await mk('Revenda Beta', 'REVENDA', sul.id, ['Filial Centro', 'Filial Norte']);
   const kappa = await mk('Revenda Kappa', 'REVENDA', norte.id, ['Loja 1']);
   const [marketing] = await db.insert(schema.users).values({ name: 'Marcelo Giacometti', email: 'mkt@corteva.test', passwordHash: await hashPassword('senha-forte-123'), role: 'MARKETING', status: 'ACTIVE' }).returning();
-  const [gestor] = await db.insert(schema.users).values({ name: 'Renata Lopes', email: 'renata@beta.test', passwordHash: await hashPassword('senha-forte-123'), whatsapp: '5554911110000', role: 'GESTOR', status: 'ACTIVE', distributorId: beta.d.id, consentAt: new Date() }).returning();
+  const [gestor] = await db.insert(schema.users).values({ name: 'Renata Lopes', email: 'renata@beta.test', passwordHash: await hashPassword('senha-forte-123'), role: 'GESTOR', status: 'ACTIVE', distributorId: beta.d.id, consentAt: new Date() }).returning();
   const actor = (u: typeof marketing): Actor => ({ id: u.id, role: u.role as Actor['role'], distributorId: u.distributorId, unitId: u.unitId, regionalId: u.regionalId });
   return { sul, norte, alfa, beta, kappa, marketing, gestor, actor };
 }
@@ -28,7 +28,7 @@ let n = 0;
 export async function addSeller(distributorId: string, unitId: string, name: string, status: 'ACTIVE' | 'PENDING' = 'ACTIVE') {
   n++;
   const [u] = await db.insert(schema.users).values({
-    name, whatsapp: '55549' + String(80000000 + n), role: 'VENDEDOR', status, distributorId, unitId, consentAt: new Date(),
+    name, email: `vendedor${n}@teste.com`, role: 'VENDEDOR', status, distributorId, unitId, consentAt: new Date(),
   }).returning();
   return u;
 }

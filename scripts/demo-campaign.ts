@@ -21,6 +21,6 @@ import { localToUtc, toLocalParts } from '../src/lib/schedule';
   const [d] = await db.select().from(schema.distributors).where(eq(schema.distributors.name, 'Revenda Beta'));
   const [u] = await db.select().from(schema.units).where(eq(schema.units.distributorId, d.id));
   const s = await addSeller(d.id, u.id, 'Paulo Teixeira');
-  console.log('Campanha ativa. Vendedor de teste:', s.whatsapp);
+  console.log('Campanha ativa. Vendedor de teste:', s.email);
   await getPool().end();
 })();

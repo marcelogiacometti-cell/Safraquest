@@ -1,7 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db';
 import { requirePanel, fmtDate } from '@/lib/web';
-import { formatPhone } from '@/lib/phone';
 import { aprovar, recusar, definirCarteira, desativar } from '../actions';
 export const dynamic = 'force-dynamic';
 export default async function Usuarios() {
@@ -15,7 +14,7 @@ export default async function Usuarios() {
   const reps = us.filter((r) => r.u.role === 'REPRESENTANTE' && r.u.status === 'ACTIVE');
   return (<><h1>Usuários ({us.length})</h1>
     <div className="card"><table><thead><tr><th>Nome</th><th>Papel</th><th>Onde</th><th>Situação</th><th></th></tr></thead><tbody>
-      {us.map(({ u, d, un }) => (<tr key={u.id}><td><b>{u.name}</b><br /><span className="mu">{u.email ?? formatPhone(u.whatsapp ?? '')} · {fmtDate(u.createdAt)}</span></td>
+      {us.map(({ u, d, un }) => (<tr key={u.id}><td><b>{u.name}</b><br /><span className="mu">{u.email} · {fmtDate(u.createdAt)}</span></td>
         <td>{u.role}</td><td>{d ?? '—'}{un ? ` · ${un}` : ''}</td>
         <td><span className={'pill' + (u.status === 'ACTIVE' ? '' : u.status === 'PENDING' ? ' am' : ' rd')}>{u.status}</span></td>
         <td style={{ whiteSpace: 'nowrap' }}>

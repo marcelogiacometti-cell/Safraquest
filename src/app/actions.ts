@@ -7,26 +7,27 @@ import { currentQuestion, submitAnswer, QuizError, startAttempt } from '@/lib/qu
 import { clearSession, requireMember, setSession, currentUser } from '@/lib/web';
 import { submitReport } from '@/lib/reports';
 import { leaveProgram, pauseNotifications } from '@/lib/admin';
-import { normalizePhone } from '@/lib/phone';
+import { normalizeEmail, verifyUnsub } from '@/lib/mail';
+import { optOut } from '@/lib/whatsapp/webhook';
 
 const REASONS: Record<string, string> = {
-  INVALID_PHONE: 'Número inválido. Use DDD + número.', NOT_FOUND: 'Esse número não está cadastrado. Peça o link de cadastro ao seu gestor.',
+  INVALID_EMAIL: 'E-mail inválido.', NOT_FOUND: 'Esse e-mail não está cadastrado. Peça o link de cadastro ao seu gestor.',
   PENDING: 'Seu cadastro ainda está aguardando aprovação do gestor.', INACTIVE: 'Seu acesso está inativo. Fale com seu gestor.',
-  RATE_LIMIT: 'Muitos pedidos de código. Aguarde alguns minutos.', SEND_FAILED: 'Não conseguimos enviar o código agora. Tente de novo.',
+  RATE_LIMIT: 'Muitos pedidos de código. Aguarde alguns minutos.', SEND_FAILED: 'Não conseguimos enviar o e-mail agora. Tente de novo.',
 };
 
 export async function pedirCodigo(_: unknown, fd: FormData) {
-  const r = await requestLoginCode(String(fd.get('tel') ?? ''));
+  const r = await requestLoginCode(String(fd.get('email') ?? ''));
   if (!r.ok) {
     if (r.reason === 'PENDING') redirect('/pendente');
     return { error: REASONS[r.reason] };
   }
-  redirect('/entrar/codigo?tel=' + encodeURIComponent(r.phone));
+  redirect('/entrar/codigo?email=' + encodeURIComponent(r.email));
 }
 
 export async function confirmarCodigo(_: unknown, fd: FormData) {
-  const tel = String(fd.get('tel') ?? '');
-  const r = await verifyLoginCode(tel, String(fd.get('codigo') ?? '').replace(/\D/g, ''));
+  const email = String(fd.get('email') ?? '');
+  const r = await verifyLoginCode(email, String(fd.get('codigo') ?? '').replace(/\D/g, ''));
   if (!r.ok) {
     const m = { NO_CODE: 'Peça um novo código.', EXPIRED: 'Código vencido. Peça um novo.', TOO_MANY: 'Muitas tentativas. Peça um novo código.', WRONG: `Código incorreto. Restam ${r.attemptsLeft ?? 0} tentativa(s).` }[r.reason];
     return { error: m };
@@ -38,12 +39,12 @@ export async function confirmarCodigo(_: unknown, fd: FormData) {
 
 export async function cadastrar(_: unknown, fd: FormData) {
   const r = await registerViaInvite({
-    token: String(fd.get('token')), name: String(fd.get('nome') ?? ''), whatsapp: String(fd.get('tel') ?? ''),
+    token: String(fd.get('token')), name: String(fd.get('nome') ?? ''),
     unitId: (fd.get('unidade') as string) || null, consent: fd.get('aceite') === 'on',
     email: String(fd.get('email') ?? ''), password: String(fd.get('senha') ?? ''),
   });
   if (!r.ok) {
-    const m: Record<string, string> = { NAME: 'Informe nome e sobrenome.', PHONE: 'WhatsApp inválido.', CONSENT: 'É preciso aceitar receber as mensagens para participar.', DUPLICATE: 'Esse número já está cadastrado.', UNIT: 'Escolha a sua unidade.', INVITE: 'Este link não está mais disponível.', EMAIL: 'E-mail inválido.', PASSWORD: 'A senha precisa ter pelo menos 8 caracteres.' };
+    const m: Record<string, string> = { NAME: 'Informe nome e sobrenome.', CONSENT: 'É preciso aceitar receber as mensagens para participar.', DUPLICATE: 'Esse número já está cadastrado.', UNIT: 'Escolha a sua unidade.', INVITE: 'Este link não está mais disponível.', EMAIL: 'E-mail inválido.', PASSWORD: 'A senha precisa ter pelo menos 8 caracteres.' };
     return { error: m[r.reason] };
   }
   redirect('/pendente');
@@ -79,3 +80,11 @@ export async function reportar(_: unknown, fd: FormData) {
 }
 export async function pausar(_: unknown, fd: FormData) { const u = await requireMember(); await pauseNotifications(u.id, Number(fd.get('dias') ?? 7)); return { ok: 'Avisos pausados.' }; }
 export async function sairPrograma() { const u = await requireMember(); await leaveProgram(u.id); await clearSession(); redirect('/entrar'); }
+
+export async function confirmarSaidaEmail(_: unknown, fd: FormData) {
+  const email = normalizeEmail(String(fd.get('e') ?? ''));
+  if (!email || !verifyUnsub(email, String(fd.get('s') ?? ''))) return { error: 'Link inválido.' };
+  const [u] = await db.select().from(schema.users).where(eq(schema.users.email, email));
+  if (u) await optOut(u.id, 'email:descadastro');
+  return { ok: 'Pronto. Você não vai mais receber e-mails do SafraQuest.' };
+}

@@ -48,30 +48,30 @@ describe('cadastro por convite e aprovação', () => {
   it('vendedor se cadastra, fica pendente e só entra depois da aprovação', async () => {
     const g = w.actor(w.gestor);
     const inv = await createInvite(g, { role: 'VENDEDOR', distributorId: w.beta.d.id, unitId: w.beta.us[0].id, maxUses: 2 });
-    const bad = await registerViaInvite({ token: inv.token, name: 'Carlos', whatsapp: '(54) 99999-0001', consent: true });
+    const bad = await registerViaInvite({ token: inv.token, name: 'Carlos', email: 'carlos@t.com', consent: true });
     expect(bad).toMatchObject({ ok: false, reason: 'NAME' });
-    const noConsent = await registerViaInvite({ token: inv.token, name: 'Carlos Menezes', whatsapp: '(54) 99999-0001', consent: false });
+    const noConsent = await registerViaInvite({ token: inv.token, name: 'Carlos Menezes', email: 'carlos@t.com', consent: false });
     expect(noConsent).toMatchObject({ ok: false, reason: 'CONSENT' });
-    const ok = await registerViaInvite({ token: inv.token, name: 'Carlos Menezes', whatsapp: '(54) 99999-0001', consent: true });
+    const ok = await registerViaInvite({ token: inv.token, name: 'Carlos Menezes', email: 'carlos@t.com', consent: true });
     expect(ok.ok).toBe(true);
-    const dup = await registerViaInvite({ token: inv.token, name: 'Outro Carlos', whatsapp: '54999990001', consent: true });
+    const dup = await registerViaInvite({ token: inv.token, name: 'Outro Carlos', email: 'carlos@t.com', consent: true });
     expect(dup).toMatchObject({ ok: false, reason: 'DUPLICATE' });
 
     // pendente não consegue pedir código
-    expect(await requestLoginCode('(54) 99999-0001')).toMatchObject({ ok: false, reason: 'PENDING' });
-    const u = (await db.select().from(schema.users).where(eq(schema.users.whatsapp, '5554999990001')))[0];
+    expect(await requestLoginCode('carlos@t.com')).toMatchObject({ ok: false, reason: 'PENDING' });
+    const u = (await db.select().from(schema.users).where(eq(schema.users.email, 'carlos@t.com')))[0];
     const res = await approveUser(g, u.id);
     expect(res.notified).toBe(true);
     expect(consoleOutbox.some((m) => m.template === 'cadastro_aprovado')).toBe(true);
     await expect(approveUser(g, u.id)).rejects.toThrow(/já foi decidido/);
-    expect((await requestLoginCode('(54) 99999-0001')).ok).toBe(true);
+    expect((await requestLoginCode('carlos@t.com')).ok).toBe(true);
   });
 
   it('limite de usos do link e link vencido', async () => {
     const g = w.actor(w.gestor);
     const inv = await createInvite(g, { role: 'VENDEDOR', distributorId: w.beta.d.id, unitId: w.beta.us[1].id, maxUses: 1 });
-    await registerViaInvite({ token: inv.token, name: 'Ana Souza', whatsapp: '54999990002', consent: true });
-    const full = await registerViaInvite({ token: inv.token, name: 'Bia Souza', whatsapp: '54999990003', consent: true });
+    await registerViaInvite({ token: inv.token, name: 'Ana Souza', email: 'ana@t.com', consent: true });
+    const full = await registerViaInvite({ token: inv.token, name: 'Bia Souza', email: 'bia@t.com', consent: true });
     expect(full).toMatchObject({ ok: false, reason: 'INVITE', invite: 'FULL' });
     const old = await createInvite(w.actor(w.marketing), { role: 'GESTOR', distributorId: w.beta.d.id, days: 1 });
     await db.update(schema.inviteLinks).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(schema.inviteLinks.token, old.token));
@@ -91,7 +91,7 @@ describe('cadastro por convite e aprovação', () => {
 describe('login por código no WhatsApp', () => {
   it('código correto entra; errado conta tentativas; 3 erros bloqueiam', async () => {
     const u = await addSeller(w.beta.d.id, w.beta.us[0].id, 'Login Teste');
-    const phone = u.whatsapp!;
+    const phone = u.email!;
     expect((await requestLoginCode(phone)).ok).toBe(true);
     const sent = consoleOutbox.filter((m) => m.template === 'codigo_acesso').at(-1)!;
     const code = sent.params![0];
@@ -108,11 +108,11 @@ describe('login por código no WhatsApp', () => {
     expect(await verifyLoginCode(phone, code2)).toMatchObject({ ok: false }); // não reutiliza
   });
   it('número desconhecido, inválido e limite de pedidos', async () => {
-    expect(await requestLoginCode('123')).toMatchObject({ ok: false, reason: 'INVALID_PHONE' });
-    expect(await requestLoginCode('(54) 91111-9999')).toMatchObject({ ok: false, reason: 'NOT_FOUND' });
+    expect(await requestLoginCode('abc')).toMatchObject({ ok: false, reason: 'INVALID_EMAIL' });
+    expect(await requestLoginCode('x@nao.com')).toMatchObject({ ok: false, reason: 'NOT_FOUND' });
     const u = await addSeller(w.beta.d.id, w.beta.us[0].id, 'Spam Teste');
-    for (let i = 0; i < 3; i++) expect((await requestLoginCode(u.whatsapp!)).ok).toBe(true);
-    expect(await requestLoginCode(u.whatsapp!)).toMatchObject({ ok: false, reason: 'RATE_LIMIT' });
+    for (let i = 0; i < 3; i++) expect((await requestLoginCode(u.email!)).ok).toBe(true);
+    expect(await requestLoginCode(u.email!)).toMatchObject({ ok: false, reason: 'RATE_LIMIT' });
   });
   it('painel: e-mail e senha', async () => {
     expect((await panelLogin('MKT@corteva.test', 'senha-forte-123')).ok).toBe(true);
@@ -296,7 +296,9 @@ describe('webhook da Meta', () => {
     await handleWebhook({ entry: [{ changes: [{ value: { statuses: [{ id: 'wamid.TESTE', status: 'failed', errors: [{ title: 'Número inválido' }] }] } }] }] });
     expect((await db.select().from(schema.messageLogs).where(eq(schema.messageLogs.id, log.id)))[0]).toMatchObject({ status: 'FAILED', error: 'Número inválido' });
 
-    const [u] = await db.select().from(schema.users).where(eq(schema.users.id, log.userId));
+    const [u0] = await db.select().from(schema.users).where(eq(schema.users.id, log.userId));
+    await db.update(schema.users).set({ whatsapp: '5554900000001' }).where(eq(schema.users.id, u0.id));
+    const [u] = await db.select().from(schema.users).where(eq(schema.users.id, u0.id));
     const res = await handleWebhook({ entry: [{ changes: [{ value: { messages: [{ from: u.whatsapp!, type: 'text', text: { body: ' sair ' } }] } }] }] });
     expect(res.optOuts).toBe(1);
     const [after] = await db.select().from(schema.users).where(eq(schema.users.id, u.id));
@@ -312,11 +314,11 @@ describe('links para gestor e representante', () => {
   it('só o Marketing gera link de gestor/representante; gestor cadastra com e-mail e senha', async () => {
     const m = w.actor(w.marketing);
     const g = await createInvite(m, { role: 'GESTOR', distributorId: w.alfa.d.id, days: 7 });
-    const sem = await registerViaInvite({ token: g.token, name: 'Gestor Alfa', whatsapp: '54999991000', consent: false });
+    const sem = await registerViaInvite({ token: g.token, name: 'Gestor Alfa', email: '', consent: false });
     expect(sem).toMatchObject({ ok: false, reason: 'EMAIL' });
-    const curta = await registerViaInvite({ token: g.token, name: 'Gestor Alfa', whatsapp: '54999991000', consent: false, email: 'g@alfa.test', password: '123' });
+    const curta = await registerViaInvite({ token: g.token, name: 'Gestor Alfa', consent: false, email: 'g@alfa.test', password: '123' });
     expect(curta).toMatchObject({ ok: false, reason: 'PASSWORD' });
-    const ok = await registerViaInvite({ token: g.token, name: 'Gestor Alfa', whatsapp: '54999991000', consent: false, email: 'G@Alfa.test', password: 'senha-do-gestor' });
+    const ok = await registerViaInvite({ token: g.token, name: 'Gestor Alfa', consent: false, email: 'G@Alfa.test', password: 'senha-do-gestor' });
     expect(ok.ok).toBe(true);
     expect((await panelLogin('g@alfa.test', 'senha-do-gestor')).ok).toBe(false); // ainda pendente
     await approveUser(m, (ok as { userId: string }).userId);
@@ -326,13 +328,13 @@ describe('links para gestor e representante', () => {
   it('representante: link sem distribuidor, aprovação e carteira', async () => {
     const m = w.actor(w.marketing);
     const r = await createInvite(m, { role: 'REPRESENTANTE', days: 7 });
-    const ok = await registerViaInvite({ token: r.token, name: 'Rita Representante', whatsapp: '54999992000', consent: true });
+    const ok = await registerViaInvite({ token: r.token, name: 'Rita Representante', email: 'rita@t.com', consent: true });
     expect(ok.ok).toBe(true);
     const uid = (ok as { userId: string }).userId;
     await approveUser(m, uid);
     const { setRepPortfolio } = await import('@/lib/admin');
     await setRepPortfolio(uid, [w.alfa.d.id, w.beta.d.id]);
     expect((await db.select().from(schema.repAssignments).where(eq(schema.repAssignments.userId, uid))).length).toBe(2);
-    expect((await requestLoginCode('54999992000')).ok).toBe(true);
+    expect((await requestLoginCode('rita@t.com')).ok).toBe(true);
   });
 });

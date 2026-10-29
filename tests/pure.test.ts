@@ -74,3 +74,27 @@ describe('agenda', () => {
 describe('criptografia', () => {
   it('ida e volta', () => expect(decrypt(encrypt('segredo-da-meta'))).toBe('segredo-da-meta'));
 });
+
+import { renderMail, verifyUnsub, unsubSig, normalizeEmail } from '@/lib/mail';
+describe('e-mails', () => {
+  it('normaliza e valida endereço', () => {
+    expect(normalizeEmail('  Ana@Loja.COM ')).toBe('ana@loja.com');
+    expect(normalizeEmail('sem-arroba')).toBeNull();
+  });
+  it('código de acesso: sem rodapé de descadastro e com o código no texto', () => {
+    const m = renderMail('codigo_acesso', ['123456'], 'a@b.com');
+    expect(m.text).toContain('123456'); expect(m.text).not.toContain('/sair'); expect(m.subject).toMatch(/código/i);
+  });
+  it('missão: link vira botão e há link para parar de receber', () => {
+    const m = renderMail('abertura_missao_semanal', ['Paulo', 'Produto Z', 'https://app.test/l/abc'], 'p@x.com');
+    expect(m.html).toContain('href="https://app.test/l/abc"'); expect(m.html).toContain('Abrir o SafraQuest');
+    expect(m.text).toContain('/sair?e=p%40x.com');
+  });
+  it('escapa HTML em nomes', () => {
+    expect(renderMail('lembrete_missao', ['<b>x</b>', 'P', 'https://a.b/c'], 'p@x.com').html).not.toContain('<b>x</b>');
+  });
+  it('assinatura do descadastro só vale para o próprio e-mail', () => {
+    expect(verifyUnsub('a@b.com', unsubSig('a@b.com'))).toBe(true);
+    expect(verifyUnsub('c@d.com', unsubSig('a@b.com'))).toBe(false);
+  });
+});

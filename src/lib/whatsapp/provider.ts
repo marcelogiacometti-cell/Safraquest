@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db';
 import { decrypt } from '../crypto';
 import { env } from '../env';
+import { MailProvider } from '../mail';
 
 export type SendResult = { ok: true; id: string } | { ok: false; error: string };
 export type TemplateParam = string;
@@ -101,7 +102,13 @@ export async function getProvider(): Promise<WaProvider> {
     if (!c?.wabaId || !c.phoneNumberId || !c.tokenEnc) throw new Error('Integração com a Meta incompleta. Preencha em Integração.');
     return new MetaProvider({ wabaId: c.wabaId, phoneNumberId: c.phoneNumberId, token: decrypt(c.tokenEnc) });
   }
+  if (env.smtpHost) return new MailProvider();
   return new ConsoleProvider();
+}
+
+/** Para onde a mensagem vai: telefone se o canal for a Meta; senão, e-mail. */
+export function contactOf(u: { email: string | null; whatsapp: string | null }): string | null {
+  return env.waProvider === 'meta' ? u.whatsapp : u.email;
 }
 
 export function mapTemplateStatus(s: string): 'APPROVED' | 'IN_REVIEW' | 'REJECTED' {

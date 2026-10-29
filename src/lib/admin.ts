@@ -4,7 +4,7 @@ import { type Actor, canApprove, canCreateInvite, type Role } from './access';
 import { randomToken } from './crypto';
 import { env } from './env';
 import { DEFAULT_MOMENTS, planMissions } from './schedule';
-import { getProvider } from './whatsapp/provider';
+import { getProvider, contactOf } from './whatsapp/provider';
 
 export const QUESTIONS_PER_MISSION = 5;
 
@@ -232,9 +232,9 @@ export async function approveUser(actor: Actor, userId: string) {
   await db.update(schema.users).set({ status: 'ACTIVE', approvedAt: new Date(), approvedById: actor.id }).where(eq(schema.users.id, userId));
   let notified = false;
   const [tpl] = await db.select().from(schema.waTemplates).where(eq(schema.waTemplates.name, 'cadastro_aprovado'));
-  if (u.whatsapp && u.consentAt && tpl?.status === 'APPROVED') {
+  if (contactOf(u) && !u.optOutAt && tpl?.status === 'APPROVED') {
     const p = await getProvider();
-    notified = (await p.sendTemplate(u.whatsapp, 'cadastro_aprovado', [u.name.split(' ')[0], `${env.appUrl}${u.role === 'GESTOR' ? '/painel/login' : '/entrar'}`])).ok;
+    notified = (await p.sendTemplate(contactOf(u)!, 'cadastro_aprovado', [u.name.split(' ')[0], `${env.appUrl}${u.role === 'GESTOR' ? '/painel/login' : '/entrar'}`])).ok;
   }
   return { notified };
 }
