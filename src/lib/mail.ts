@@ -34,11 +34,14 @@ export function renderMail(template: string, params: string[], to: string) {
   const fill = (fn: (p: string) => string) => body.replace(/\{\{(\d+)\}\}/g, (_, n) => fn(params[Number(n) - 1] ?? ''));
   const subject = SUBJECTS[template] ?? 'SafraQuest';
   const footer = template === 'codigo_acesso' ? '' : `Para não receber mais e-mails do SafraQuest: ${unsubUrl(to)}`;
-  const text = fill((p) => p) + (footer ? `\n\n${footer}` : '');
+  const sup = env.supportEmail;
+  const supText = sup ? `Dúvidas ou problemas? Escreva para ${sup}` : '';
+  const text = fill((p) => p) + (supText ? `\n\n${supText}` : '') + (footer ? `\n${footer}` : '');
   const link = params.find(isUrl);
   const html = fill((p) => (isUrl(p) ? `<a href="${esc(p)}" style="color:#1E7B4F">${esc(p)}</a>` : template === 'codigo_acesso' ? `<b style="font-size:22px;letter-spacing:3px">${esc(p)}</b>` : esc(p)));
   const button = link && template !== 'cadastro_aprovado' ? `<p style="margin:24px 0"><a href="${esc(link)}" style="background:#1E7B4F;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:700">Abrir o SafraQuest</a></p>` : link ? `<p style="margin:24px 0"><a href="${esc(link)}" style="background:#1E7B4F;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:700">Entrar</a></p>` : '';
-  const foot = footer ? `<p style="color:#5b6b60;font-size:12px;margin-top:28px">Você recebe este e-mail por participar do SafraQuest. <a href="${esc(unsubUrl(to))}" style="color:#5b6b60">Parar de receber</a></p>` : '';
+  const supHtml = sup ? `<p style="color:#5b6b60;font-size:13px;margin-top:28px">Dúvidas ou problemas? Escreva para <a href="mailto:${esc(sup)}" style="color:#1E7B4F">${esc(sup)}</a></p>` : '';
+  const foot = supHtml + (footer ? `<p style="color:#5b6b60;font-size:12px;margin-top:${sup ? 8 : 28}px">Você recebe este e-mail por participar do SafraQuest. <a href="${esc(unsubUrl(to))}" style="color:#5b6b60">Parar de receber</a></p>` : '');
   return { subject, text, html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#12261C"><h2 style="color:#1E7B4F;margin:0 0 16px">🌱 SafraQuest</h2><p style="font-size:16px;line-height:1.5">${html}</p>${button}${foot}</div>` };
 }
 
@@ -50,7 +53,7 @@ export class MailProvider implements WaProvider {
   private from = process.env.MAIL_FROM || process.env.SMTP_USER || 'SafraQuest <no-reply@localhost>';
   private async send(to: string, subject: string, text: string, html: string, unsub: boolean): Promise<SendResult> {
     try {
-      const info = await this.t.sendMail({ from: this.from, to, subject, text, html, ...(unsub ? { headers: { 'List-Unsubscribe': `<${unsubUrl(to)}>` } } : {}) });
+      const info = await this.t.sendMail({ from: this.from, to, subject, text, html, ...(env.supportEmail ? { replyTo: env.supportEmail } : {}), ...(unsub ? { headers: { 'List-Unsubscribe': `<${unsubUrl(to)}>` } } : {}) });
       return { ok: true, id: String(info.messageId ?? '') };
     } catch (e) { return { ok: false, error: e instanceof Error ? e.message : 'falha no envio' }; }
   }
