@@ -42,7 +42,7 @@ services:
     runtime: docker
     plan: starter
     schedule: "*/10 * * * *"
-    dockerCommand: "sh -c 'wget -qO- --header=\"Authorization: Bearer $CRON_SECRET\" \"http://$APP_HOSTPORT/api/cron/dispatch\"'"
+    dockerCommand: "sh -c 'echo alvo=$APP_HOSTPORT; wget -S -T 60 -O- --header=\"Authorization: Bearer $CRON_SECRET\" \"http://$APP_HOSTPORT/api/cron/dispatch\"'"
     envVars:
       - key: CRON_SECRET
         fromService:
