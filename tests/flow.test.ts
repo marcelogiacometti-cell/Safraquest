@@ -408,6 +408,17 @@ describe('regionais', () => {
     await deleteGroup(gid);
     expect((await db.select().from(schema.channelGroups).where(eq(schema.channelGroups.id, gid))).length).toBe(0);
   });
+  it('dashboard gerencial: cadastrados, ativos em 7 dias e campanhas', async () => {
+    const { managerDashboard } = await import('@/lib/dashboard');
+    const d = await managerDashboard(w.actor(w.marketing));
+    expect(d.users.sellersActive).toBeGreaterThan(0);
+    expect(d.users.active7).toBeLessThanOrEqual(d.users.sellersActive);
+    expect(d.weekly).toHaveLength(6);
+    expect(d.health).not.toBeNull();
+    const g = await managerDashboard(w.actor(w.gestor));
+    expect(g.health).toBeNull();
+    expect(g.users.sellersActive).toBeLessThanOrEqual(d.users.sellersActive);
+  });
   it('relatório filtra por regional', async () => {
     const { campaignEffectiveness } = await import('@/lib/effectiveness');
     const all = (await campaignEffectiveness(w.actor(w.marketing), { campaignId }))!;
