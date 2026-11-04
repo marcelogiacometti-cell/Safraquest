@@ -2,9 +2,15 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db';
 import { requirePanel, fmtDate } from '@/lib/web';
 import { aprovar, recusar, definirCarteira, desativar } from '../actions';
+import { ConviteCard } from '../convite';
 export const dynamic = 'force-dynamic';
 export default async function Usuarios() {
-  const { user: me } = await requirePanel(['MARKETING']);
+  const { user: me, actor } = await requirePanel(['MARKETING', 'GESTOR']);
+  if (me.role === 'GESTOR') {
+    const mine = actor.distributorId ? await db.select().from(schema.users).where(eq(schema.users.distributorId, actor.distributorId)) : [];
+    return (<><h1>Usuários</h1><ConviteCard actor={actor} role={me.role} />
+      <div className="card"><h2>Meu distribuidor ({mine.length})</h2><table><tbody>{mine.map((u) => <tr key={u.id}><td><b>{u.name}</b><br /><span className="mu">{u.email}</span></td><td>{u.role}</td><td>{u.status}</td></tr>)}</tbody></table></div></>);
+  }
   const us = await db.select({ u: schema.users, d: schema.distributors.name, un: schema.units.name }).from(schema.users)
     .leftJoin(schema.distributors, eq(schema.users.distributorId, schema.distributors.id)).leftJoin(schema.units, eq(schema.users.unitId, schema.units.id));
   const dists = await db.select().from(schema.distributors);
@@ -13,6 +19,7 @@ export default async function Usuarios() {
   us.sort((a, b) => (rank[a.u.status] ?? 9) - (rank[b.u.status] ?? 9) || a.u.name.localeCompare(b.u.name));
   const reps = us.filter((r) => r.u.role === 'REPRESENTANTE' && r.u.status === 'ACTIVE');
   return (<><h1>Usuários ({us.length})</h1>
+    <ConviteCard actor={actor} role={me.role} />
     <div className="card"><table><thead><tr><th>Nome</th><th>Papel</th><th>Onde</th><th>Situação</th><th></th></tr></thead><tbody>
       {us.map(({ u, d, un }) => (<tr key={u.id}><td><b>{u.name}</b><br /><span className="mu">{u.email} · {fmtDate(u.createdAt)}</span></td>
         <td>{u.role}</td><td>{d ?? '—'}{un ? ` · ${un}` : ''}</td>
