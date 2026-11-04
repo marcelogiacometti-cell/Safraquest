@@ -114,4 +114,24 @@ export async function criarRegional(_: unknown, fd: FormData) {
 }
 export async function renomearRegional(_: unknown, fd: FormData) { await requirePanel(['MARKETING']); const r = await wrap(() => admin.renameRegional(s(fd, 'id'), s(fd, 'nome'))); revalidatePath('/painel/estrutura'); return r.error ? r : { ok: 'Salvo.' }; }
 export async function apagarRegional(fd: FormData) { await requirePanel(['MARKETING']); await wrap(() => admin.deleteRegional(s(fd, 'id'))); revalidatePath('/painel/estrutura'); }
+export async function editarDistribuidor(_: unknown, fd: FormData) {
+  await requirePanel(['MARKETING']);
+  const r = await wrap(() => admin.updateDistributor(s(fd, 'id'), { name: s(fd, 'nome'), type: s(fd, 'tipo') as never, regionalId: s(fd, 'regional') }));
+  revalidatePath('/painel/estrutura'); return r.error ? r : { ok: 'Canal atualizado.' };
+}
+export async function excluirDistribuidor(_: unknown, fd: FormData) {
+  await requirePanel(['MARKETING']);
+  const r = await wrap(() => admin.deleteDistributor(s(fd, 'id')));
+  revalidatePath('/painel/estrutura'); return r.error ? r : { ok: 'Canal excluído.' };
+}
+export async function editarGrupo(_: unknown, fd: FormData) {
+  await requirePanel(['MARKETING']);
+  const r = await wrap(() => admin.updateGroup(s(fd, 'id'), { name: s(fd, 'nome'), type: (s(fd, 'tipo') || null) as never, regionalId: s(fd, 'regional') || null }));
+  revalidatePath('/painel/estrutura'); return r.error ? r : { ok: 'Grupo atualizado.' };
+}
+export async function excluirGrupo(_: unknown, fd: FormData) {
+  await requirePanel(['MARKETING']);
+  const r = await wrap(() => admin.deleteGroup(s(fd, 'id')));
+  revalidatePath('/painel/estrutura'); return r.error ? r : { ok: 'Grupo excluído.' };
+}
 export async function moverDistribuidor(fd: FormData) { await requirePanel(['MARKETING']); await wrap(() => admin.setDistributorRegional(s(fd, 'id'), s(fd, 'regional'))); revalidatePath('/painel/estrutura'); }

@@ -393,6 +393,21 @@ describe('regionais', () => {
     await deleteRegional(id);
     expect((await db.select().from(schema.regionals).where(eq(schema.regionals.id, id))).length).toBe(0);
   });
+  it('editar e excluir canal e grupo', async () => {
+    const { createDistributor, updateDistributor, deleteDistributor, updateGroup, deleteGroup } = await import('@/lib/admin');
+    const id = await createDistributor({ name: 'Canal Temp', type: 'REVENDA', regionalId: w.sul.id });
+    await updateDistributor(id, { name: 'Canal Temp 2', type: 'COOPERATIVA', regionalId: w.norte.id });
+    const [d] = await db.select().from(schema.distributors).where(eq(schema.distributors.id, id));
+    expect([d.name, d.type, d.regionalId]).toEqual(['Canal Temp 2', 'COOPERATIVA', w.norte.id]);
+    await expect(updateDistributor(id, { name: w.alfa.d.name, type: 'REVENDA', regionalId: w.sul.id })).rejects.toThrow(/Já existe/);
+    await expect(deleteDistributor(w.alfa.d.id)).rejects.toThrow(/usuários/);
+    await deleteDistributor(id);
+    expect((await db.select().from(schema.distributors).where(eq(schema.distributors.id, id))).length).toBe(0);
+    const gid = await createGroup({ name: 'Grupo Temp', type: null, regionalId: null });
+    await updateGroup(gid, { name: 'Grupo Temp 2', type: 'REVENDA', regionalId: w.sul.id });
+    await deleteGroup(gid);
+    expect((await db.select().from(schema.channelGroups).where(eq(schema.channelGroups.id, gid))).length).toBe(0);
+  });
   it('relatório filtra por regional', async () => {
     const { campaignEffectiveness } = await import('@/lib/effectiveness');
     const all = (await campaignEffectiveness(w.actor(w.marketing), { campaignId }))!;

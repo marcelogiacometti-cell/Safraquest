@@ -218,6 +218,35 @@ export async function setDistributorRegional(distributorId: string, regionalId: 
   for (const g of groups) await refreshGroupMembers(g.id); // regras dos grupos por regional se reaplicam
 }
 
+export async function updateDistributor(id: string, input: { name: string; type: 'COOPERATIVA' | 'REVENDA'; regionalId: string }) {
+  const n = input.name.trim();
+  if (!n) throw new AdminError('NAME', 'Informe o nome do canal.');
+  const [ex] = await db.select().from(schema.distributors).where(eq(schema.distributors.name, n));
+  if (ex && ex.id !== id) throw new AdminError('DUP', 'Já existe um canal com esse nome.');
+  await db.update(schema.distributors).set({ name: n, type: input.type, regionalId: input.regionalId }).where(eq(schema.distributors.id, id));
+  const groups = await db.select().from(schema.channelGroups).where(eq(schema.channelGroups.autoInclude, true));
+  for (const g of groups) await refreshGroupMembers(g.id);
+}
+export async function deleteDistributor(id: string) {
+  const [u] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.distributorId, id)).limit(1);
+  if (u) throw new AdminError('IN_USE', 'Este canal tem usuários cadastrados. Desative ou mova os usuários antes de excluir.');
+  const unitIds = (await db.select({ id: schema.units.id }).from(schema.units).where(eq(schema.units.distributorId, id))).map((x) => x.id);
+  await db.delete(schema.inviteLinks).where(eq(schema.inviteLinks.distributorId, id));
+  if (unitIds.length) await db.delete(schema.inviteLinks).where(inArray(schema.inviteLinks.unitId, unitIds));
+  await db.delete(schema.distributors).where(eq(schema.distributors.id, id)); // unidades e grupos saem em cascata
+}
+export async function updateGroup(id: string, input: { name: string; type?: 'COOPERATIVA' | 'REVENDA' | null; regionalId?: string | null }) {
+  const n = input.name.trim();
+  if (!n) throw new AdminError('NAME', 'Dê um nome ao grupo.');
+  const [ex] = await db.select().from(schema.channelGroups).where(eq(schema.channelGroups.name, n));
+  if (ex && ex.id !== id) throw new AdminError('DUP', 'Já existe um grupo com esse nome.');
+  await db.update(schema.channelGroups).set({ name: n, type: input.type ?? null, regionalId: input.regionalId ?? null }).where(eq(schema.channelGroups.id, id));
+  await refreshGroupMembers(id);
+}
+export async function deleteGroup(id: string) {
+  await db.delete(schema.channelGroups).where(eq(schema.channelGroups.id, id)); // vínculos com campanhas saem em cascata
+}
+
 export async function createUnit(distributorId: string, name: string, kind = 'Filial') {
   if (!name.trim()) throw new AdminError('NAME', 'Informe o nome da unidade.');
   const [ex] = await db.select().from(schema.units).where(and(eq(schema.units.distributorId, distributorId), eq(schema.units.name, name.trim())));
