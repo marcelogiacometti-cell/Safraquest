@@ -92,8 +92,8 @@ export async function campaignEffectiveness(actor: Actor, f: Filters) {
     funnel, themes, hardest,
     groups: [
       group('Cooperativas', (d) => d.type === 'COOPERATIVA'),
-      group('Revendas Sul', (d) => d.type === 'REVENDA' && reg.get(d.regionalId) === 'Sul'),
-      group('Revendas Norte', (d) => d.type === 'REVENDA' && reg.get(d.regionalId) === 'Norte'),
+      group('Revendas', (d) => d.type === 'REVENDA'),
+      ...[...reg.entries()].map(([rid, rname]) => group(rname, (d) => d.regionalId === rid)),
     ].filter((g) => g.distributors > 0),
     lowDistributors: [...partByDist].filter((d) => d.sellers > 0).sort((a, b) => a.participation - b.participation).slice(0, 4),
     channels: partByDist,

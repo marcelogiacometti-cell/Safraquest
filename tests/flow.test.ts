@@ -372,3 +372,35 @@ describe('equipe de Marketing (acesso total)', () => {
     await expect(deactivateUser(w.actor(novo), w.marketing.id)).rejects.toThrow(); // novo já inativo/sem permissão
   });
 });
+
+describe('regionais', () => {
+  it('bootstrap cria as seis regionais e remove as de exemplo se ninguém as usa', async () => {
+    const { bootstrap, REGIONAIS } = await import('@/lib/bootstrap');
+    await db.insert(schema.regionals).values({ name: 'Sul' }).onConflictDoNothing();
+    await bootstrap({ approveAllTemplates: true });
+    const nomes = (await db.select().from(schema.regionals)).map((r) => r.name);
+    for (const n of REGIONAIS) expect(nomes).toContain(n);
+    expect(nomes).not.toContain('Sul');
+  });
+  it('criar, renomear, mover distribuidor e apagar só se vazia', async () => {
+    const { createRegional, renameRegional, deleteRegional, setDistributorRegional } = await import('@/lib/admin');
+    const id = await createRegional('Teste X');
+    await expect(createRegional('Teste X')).rejects.toThrow(/Já existe/);
+    await renameRegional(id, 'Teste Y');
+    await setDistributorRegional(w.alfa.d.id, id);
+    await expect(deleteRegional(id)).rejects.toThrow(/Mova-os/);
+    await setDistributorRegional(w.alfa.d.id, w.sul.id);
+    await deleteRegional(id);
+    expect((await db.select().from(schema.regionals).where(eq(schema.regionals.id, id))).length).toBe(0);
+  });
+  it('relatório filtra por regional', async () => {
+    const { campaignEffectiveness } = await import('@/lib/effectiveness');
+    const all = (await campaignEffectiveness(w.actor(w.marketing), { campaignId }))!;
+    const sul = (await campaignEffectiveness(w.actor(w.marketing), { campaignId, regionalId: w.sul.id }))!;
+    const norte = (await campaignEffectiveness(w.actor(w.marketing), { campaignId, regionalId: w.norte.id }))!;
+    expect(sul.channels.every((c) => c.regionalId === w.sul.id)).toBe(true);
+    expect(norte.channels.every((c) => c.regionalId === w.norte.id)).toBe(true);
+    expect(all.channels.length).toBeGreaterThanOrEqual(sul.channels.length + norte.channels.length);
+    expect(all.groups.some((g) => g.label === 'Centro Sul')).toBe(true);
+  });
+});

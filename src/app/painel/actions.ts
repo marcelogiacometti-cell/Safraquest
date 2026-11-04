@@ -65,7 +65,7 @@ export async function criarDistribuidor(_: unknown, fd: FormData) {
 }
 export async function criarGrupo(_: unknown, fd: FormData) {
   await requirePanel(['MARKETING']);
-  const r = await wrap(() => admin.createGroup({ name: s(fd, 'nome'), type: (s(fd, 'tipo') || null) as never, autoInclude: true }));
+  const r = await wrap(() => admin.createGroup({ name: s(fd, 'nome'), type: (s(fd, 'tipo') || null) as never, regionalId: s(fd, 'regional') || null, autoInclude: true }));
   revalidatePath('/painel/estrutura'); return r.error ? r : { ok: 'Grupo criado.' };
 }
 
@@ -106,3 +106,12 @@ export async function enviarTeste() {
   const r = await p.sendTemplate(user.email!, 'cadastro_aprovado', [user.name.split(' ')[0], await baseUrl() + '/entrar']);
   return r.ok ? { ok: 'E-mail de teste enviado. Confira a caixa de entrada e o spam.' } : { error: 'Falhou: ' + r.error };
 }
+
+export async function criarRegional(_: unknown, fd: FormData) {
+  await requirePanel(['MARKETING']);
+  const r = await wrap(() => admin.createRegional(s(fd, 'nome')));
+  revalidatePath('/painel/estrutura'); return r.error ? r : { ok: 'Regional criada.' };
+}
+export async function renomearRegional(_: unknown, fd: FormData) { await requirePanel(['MARKETING']); const r = await wrap(() => admin.renameRegional(s(fd, 'id'), s(fd, 'nome'))); revalidatePath('/painel/estrutura'); return r.error ? r : { ok: 'Salvo.' }; }
+export async function apagarRegional(fd: FormData) { await requirePanel(['MARKETING']); await wrap(() => admin.deleteRegional(s(fd, 'id'))); revalidatePath('/painel/estrutura'); }
+export async function moverDistribuidor(fd: FormData) { await requirePanel(['MARKETING']); await wrap(() => admin.setDistributorRegional(s(fd, 'id'), s(fd, 'regional'))); revalidatePath('/painel/estrutura'); }

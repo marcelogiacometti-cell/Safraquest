@@ -7,8 +7,8 @@ import { campaignEffectiveness } from '@/lib/effectiveness';
 import { Form } from '@/app/forms';
 import { salvarPergunta, apagarPergunta, definirGrupos, agendar, fecharApuracao, publicarVencedores } from '../../actions';
 export const dynamic = 'force-dynamic';
-export default async function Campanha({ params }: { params: Promise<{ id: string }> }) {
-  const { actor, user } = await requirePanel(); const { id } = await params;
+export default async function Campanha({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ regional?: string; tipo?: string }> }) {
+  const { actor, user } = await requirePanel(); const { id } = await params; const sp = await searchParams;
   const [c] = await db.select().from(schema.campaigns).where(eq(schema.campaigns.id, id)); if (!c) notFound();
   const mkt = user.role === 'MARKETING';
   const missions = await db.select().from(schema.missions).where(eq(schema.missions.campaignId, id)).orderBy(asc(schema.missions.number));
@@ -16,11 +16,17 @@ export default async function Campanha({ params }: { params: Promise<{ id: strin
   const groups = await db.select().from(schema.channelGroups);
   const chosen = new Set((await db.select().from(schema.campaignGroups).where(eq(schema.campaignGroups.campaignId, id))).map((g) => g.groupId));
   const chk = await campaignChecklist(id); const reach = await campaignReach(id);
-  const eff = c.status !== 'DRAFT' ? await campaignEffectiveness(actor, { campaignId: id }) : null;
+  const regs = (await db.select().from(schema.regionals)).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  const eff = c.status !== 'DRAFT' ? await campaignEffectiveness(actor, { campaignId: id, regionalId: sp.regional || null, type: (sp.tipo || null) as never }) : null;
   const [closure] = await db.select().from(schema.closures).where(eq(schema.closures.campaignId, id));
   return (<>
     <h1>{c.name} <span className="pill">{c.status}</span></h1>
     <p className="mu">Produto: {c.productName} · alcance previsto: {JSON.stringify(reach)}</p>
+    {c.status !== 'DRAFT' && <form method="get" className="card row" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
+      <label style={{ flex: 1, minWidth: 180 }}>Regional<select name="regional" defaultValue={sp.regional ?? ''}><option value="">Todas</option>{regs.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
+      <label style={{ flex: 1, minWidth: 180 }}>Tipo de canal<select name="tipo" defaultValue={sp.tipo ?? ''}><option value="">Todos</option><option value="COOPERATIVA">Cooperativas</option><option value="REVENDA">Revendas</option></select></label>
+      <button className="btn sm">Filtrar</button></form>}
+    {eff && eff.groups.length > 0 && <div className="card"><h2>Participação por segmento</h2><table><tbody>{eff.groups.map((g) => <tr key={g.label}><td>{g.label}</td><td>{g.distributors} canais · {g.sellers} vendedores</td><td style={{ textAlign: 'right' }}><span className="pill">{g.participation}%</span></td></tr>)}</tbody></table></div>}
     {eff && <div className="grid"><div className="card"><div className="kpi">{eff.kpis.reached}</div><span className="mu">vendedores</span></div>
       <div className="card"><div className="kpi">{eff.kpis.participationNow ?? '—'}%</div><span className="mu">participação atual</span></div>
       <div className="card"><div className="kpi">{eff.kpis.hitRate ?? '—'}%</div><span className="mu">acerto médio</span></div></div>}

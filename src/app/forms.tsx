@@ -4,7 +4,7 @@ type R = { error?: string; ok?: string } | void;
 type A = (s: unknown, fd: FormData) => Promise<R>;
 
 /** O React 19 limpa o formulário depois da ação; repomos o que a pessoa digitou quando há erro. */
-export function Form({ action, children, submit = 'Continuar', className }: { action: A; children: React.ReactNode; submit?: string; className?: string }) {
+export function Form({ action, children, submit = 'Continuar', className, small }: { action: A; children: React.ReactNode; submit?: string; className?: string; small?: boolean }) {
   const saved = useRef<[string, string][]>([]);
   const ref = useRef<HTMLFormElement>(null);
   const wrapped = async (prev: unknown, fd: FormData) => {
@@ -24,6 +24,6 @@ export function Form({ action, children, submit = 'Continuar', className }: { ac
     {children}
     {st?.error && <div className="err" role="alert">{st.error}</div>}
     {st?.ok && <div className="ok">{st.ok}</div>}
-    <button className="btn block" disabled={pending}>{pending ? 'Aguarde…' : submit}</button>
+    <button className={small ? 'btn sm' : 'btn block'} disabled={pending}>{pending ? 'Aguarde…' : submit}</button>
   </form>);
 }

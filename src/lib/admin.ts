@@ -189,6 +189,35 @@ export async function createDistributor(input: { name: string; type: 'COOPERATIV
   return d.id;
 }
 
+export async function createRegional(name: string) {
+  const n = name.trim();
+  if (!n) throw new AdminError('NAME', 'Informe o nome da regional.');
+  const [ex] = await db.select().from(schema.regionals).where(eq(schema.regionals.name, n));
+  if (ex) throw new AdminError('DUP', 'Já existe uma regional com esse nome.');
+  const [r] = await db.insert(schema.regionals).values({ name: n }).returning();
+  return r.id;
+}
+export async function renameRegional(id: string, name: string) {
+  const n = name.trim();
+  if (!n) throw new AdminError('NAME', 'Informe o nome da regional.');
+  const [ex] = await db.select().from(schema.regionals).where(eq(schema.regionals.name, n));
+  if (ex && ex.id !== id) throw new AdminError('DUP', 'Já existe uma regional com esse nome.');
+  await db.update(schema.regionals).set({ name: n }).where(eq(schema.regionals.id, id));
+}
+export async function deleteRegional(id: string) {
+  const [d] = await db.select({ id: schema.distributors.id }).from(schema.distributors).where(eq(schema.distributors.regionalId, id)).limit(1);
+  if (d) throw new AdminError('IN_USE', 'Há distribuidores nesta regional. Mova-os antes de apagar.');
+  const [u] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.regionalId, id)).limit(1);
+  if (u) throw new AdminError('IN_USE', 'Há usuários nesta regional. Ajuste-os antes de apagar.');
+  await db.delete(schema.channelGroups).where(eq(schema.channelGroups.regionalId, id));
+  await db.delete(schema.regionals).where(eq(schema.regionals.id, id));
+}
+export async function setDistributorRegional(distributorId: string, regionalId: string) {
+  await db.update(schema.distributors).set({ regionalId }).where(eq(schema.distributors.id, distributorId));
+  const groups = await db.select().from(schema.channelGroups).where(eq(schema.channelGroups.autoInclude, true));
+  for (const g of groups) await refreshGroupMembers(g.id); // regras dos grupos por regional se reaplicam
+}
+
 export async function createUnit(distributorId: string, name: string, kind = 'Filial') {
   if (!name.trim()) throw new AdminError('NAME', 'Informe o nome da unidade.');
   const [ex] = await db.select().from(schema.units).where(and(eq(schema.units.distributorId, distributorId), eq(schema.units.name, name.trim())));

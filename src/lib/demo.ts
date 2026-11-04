@@ -7,8 +7,8 @@ import type { Actor } from './access';
 export async function freshWorld() {
   await resetAll();
   await bootstrap({ approveAllTemplates: true });
-  const [sul] = await db.select().from(schema.regionals).where(eq(schema.regionals.name, 'Sul'));
-  const [norte] = await db.select().from(schema.regionals).where(eq(schema.regionals.name, 'Norte'));
+  const [sul] = await db.select().from(schema.regionals).where(eq(schema.regionals.name, 'Centro Sul'));
+  const [norte] = await db.select().from(schema.regionals).where(eq(schema.regionals.name, 'Oeste Venda Direta'));
   const mk = async (name: string, type: 'COOPERATIVA' | 'REVENDA', regionalId: string, units: string[]) => {
     const [d] = await db.insert(schema.distributors).values({ name, type, regionalId }).returning();
     const us = [];
