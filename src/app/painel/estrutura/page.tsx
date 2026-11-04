@@ -1,7 +1,7 @@
 import { db, schema } from '@/db';
 import { requirePanel } from '@/lib/web';
 import { Form } from '@/app/forms';
-import { criarDistribuidor, criarGrupo, criarRegional, renomearRegional, apagarRegional, moverDistribuidor, editarDistribuidor, excluirDistribuidor, editarGrupo, excluirGrupo } from '../actions';
+import { criarDistribuidor, criarGrupo, criarRegional, renomearRegional, apagarRegional, moverDistribuidor, editarDistribuidor, excluirDistribuidor, editarGrupo, excluirGrupo, criarFilial, editarFilial, excluirFilial } from '../actions';
 export const dynamic = 'force-dynamic';
 export default async function Estrutura() {
   await requirePanel(['MARKETING']);
@@ -19,7 +19,18 @@ export default async function Estrutura() {
       <Form action={criarRegional} submit="Adicionar regional"><label>Nova regional<input name="nome" required /></label></Form></div>
     <div className="card"><h2>Canais (distribuidores)</h2><table><thead><tr><th>Canal</th><th>Tipo</th><th>Regional</th><th>Unidades</th><th>Ações</th></tr></thead><tbody>
       {ds.map((d) => <tr key={d.id}><td>{d.name}</td><td>{d.type === 'COOPERATIVA' ? 'Cooperativa' : 'Revenda'}</td><td>{regName.get(d.regionalId)}</td>
-        <td>{us.filter((u) => u.distributorId === d.id).map((u) => u.name).join(', ')}</td>
+        <td style={{ minWidth: 230 }}>{us.filter((u) => u.distributorId === d.id).map((u) => u.name).join(', ') || '—'}
+          <details style={{ marginTop: 6 }}><summary className="btn sm sec" style={{ display: 'inline-block' }}>Filiais</summary>
+            {us.filter((u) => u.distributorId === d.id).map((u) => <div key={u.id} style={{ borderTop: '1px solid var(--bd)', padding: '6px 0' }}>
+              <Form action={editarFilial} submit="Salvar" small><input type="hidden" name="id" value={u.id} />
+                <label>Nome<input name="nome" defaultValue={u.name} required /></label>
+                <label>Tipo<select name="tipo" defaultValue={u.kind}><option>Matriz</option><option>Filial</option><option>Equipe</option></select></label></Form>
+              <details><summary className="mu" style={{ cursor: 'pointer' }}>Excluir {u.name}</summary>
+                <Form action={excluirFilial} submit="Confirmar exclusão" small><input type="hidden" name="id" value={u.id} /><p className="mu">Só é possível se não houver usuários nela.</p></Form></details></div>)}
+            <div style={{ borderTop: '1px solid var(--bd)', padding: '6px 0' }}><b>Nova filial</b>
+              <Form action={criarFilial} submit="Adicionar" small><input type="hidden" name="dist" value={d.id} />
+                <label>Nome<input name="nome" required placeholder="Ex.: Filial Dourados" /></label>
+                <label>Tipo<select name="tipo" defaultValue="Filial"><option>Matriz</option><option>Filial</option><option>Equipe</option></select></label></Form></div></details></td>
         <td style={{ minWidth: 260 }}>
           <details><summary className="btn sm sec" style={{ display: 'inline-block' }}>Editar</summary>
             <Form action={editarDistribuidor} submit="Salvar" small><input type="hidden" name="id" value={d.id} />

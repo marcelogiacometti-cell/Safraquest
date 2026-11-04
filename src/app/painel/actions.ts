@@ -134,4 +134,19 @@ export async function excluirGrupo(_: unknown, fd: FormData) {
   const r = await wrap(() => admin.deleteGroup(s(fd, 'id')));
   revalidatePath('/painel/estrutura'); return r.error ? r : { ok: 'Grupo excluído.' };
 }
+export async function criarFilial(_: unknown, fd: FormData) {
+  await requirePanel(['MARKETING']);
+  const r = await wrap(() => admin.createUnit(s(fd, 'dist'), s(fd, 'nome'), s(fd, 'tipo') || 'Filial'));
+  revalidatePath('/painel/estrutura'); return r.error ? r : { ok: 'Filial criada.' };
+}
+export async function editarFilial(_: unknown, fd: FormData) {
+  await requirePanel(['MARKETING']);
+  const r = await wrap(() => admin.renameUnit(s(fd, 'id'), s(fd, 'nome'), s(fd, 'tipo') || undefined));
+  revalidatePath('/painel/estrutura'); return r.error ? r : { ok: 'Filial atualizada.' };
+}
+export async function excluirFilial(_: unknown, fd: FormData) {
+  await requirePanel(['MARKETING']);
+  const r = await wrap(() => admin.deleteUnit(s(fd, 'id')));
+  revalidatePath('/painel/estrutura'); return r.error ? r : { ok: 'Filial excluída.' };
+}
 export async function moverDistribuidor(fd: FormData) { await requirePanel(['MARKETING']); await wrap(() => admin.setDistributorRegional(s(fd, 'id'), s(fd, 'regional'))); revalidatePath('/painel/estrutura'); }

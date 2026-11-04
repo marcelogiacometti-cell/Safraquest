@@ -419,6 +419,18 @@ describe('regionais', () => {
     expect(g.health).toBeNull();
     expect(g.users.sellersActive).toBeLessThanOrEqual(d.users.sellersActive);
   });
+  it('filiais: criar, renomear e excluir só sem usuários; convite exige filial do mesmo canal', async () => {
+    const { createUnit, renameUnit, deleteUnit, createInvite } = await import('@/lib/admin');
+    const uid = await createUnit(w.beta.d.id, 'Filial Nova');
+    await renameUnit(uid, 'Filial Nova 2', 'Equipe');
+    await expect(renameUnit(uid, w.beta.us[0].name)).rejects.toThrow(/já existe/i);
+    await expect(createInvite(w.actor(w.marketing), { role: 'VENDEDOR', distributorId: w.alfa.d.id, unitId: uid })).rejects.toThrow(/não pertence/);
+    const inv = await createInvite(w.actor(w.marketing), { role: 'VENDEDOR', distributorId: w.beta.d.id, unitId: uid });
+    expect(inv.token).toBeTruthy();
+    await deleteUnit(uid);
+    expect((await db.select().from(schema.units).where(eq(schema.units.id, uid))).length).toBe(0);
+    await expect(deleteUnit(w.alfa.us[0].id)).rejects.toThrow(/usuários/);
+  });
   it('relatório filtra por regional', async () => {
     const { campaignEffectiveness } = await import('@/lib/effectiveness');
     const all = (await campaignEffectiveness(w.actor(w.marketing), { campaignId }))!;

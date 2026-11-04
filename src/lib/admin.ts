@@ -255,6 +255,22 @@ export async function createUnit(distributorId: string, name: string, kind = 'Fi
   return u.id;
 }
 
+export async function renameUnit(id: string, name: string, kind?: string) {
+  const n = name.trim();
+  if (!n) throw new AdminError('NAME', 'Informe o nome da filial.');
+  const [cur] = await db.select().from(schema.units).where(eq(schema.units.id, id));
+  if (!cur) throw new AdminError('NOT_FOUND', 'Filial não encontrada.');
+  const [ex] = await db.select().from(schema.units).where(and(eq(schema.units.distributorId, cur.distributorId), eq(schema.units.name, n)));
+  if (ex && ex.id !== id) throw new AdminError('DUP', 'Essa filial já existe neste canal.');
+  await db.update(schema.units).set({ name: n, ...(kind ? { kind } : {}) }).where(eq(schema.units.id, id));
+}
+export async function deleteUnit(id: string) {
+  const [u] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.unitId, id)).limit(1);
+  if (u) throw new AdminError('IN_USE', 'Há usuários nesta filial. Mova-os antes de excluir.');
+  await db.delete(schema.inviteLinks).where(eq(schema.inviteLinks.unitId, id));
+  await db.delete(schema.units).where(eq(schema.units.id, id));
+}
+
 export async function setRepPortfolio(userId: string, distributorIds: string[]) {
   const [u] = await db.select().from(schema.users).where(eq(schema.users.id, userId));
   if (!u || u.role !== 'REPRESENTANTE') throw new AdminError('ROLE', 'Só representantes têm carteira.');
@@ -271,6 +287,7 @@ export async function createInvite(actor: Actor, input: { role: Role; distributo
     if (!u) throw new AdminError('UNIT', 'Unidade não encontrada.');
     unitDist = u.distributorId;
   }
+  if (unitDist && input.distributorId && input.distributorId !== unitDist) throw new AdminError('UNIT', 'Essa filial não pertence ao distribuidor escolhido.');
   const dist = input.distributorId ?? unitDist ?? null;
   if (!canCreateInvite(actor, input.role, dist, input.unitId ?? null, unitDist)) throw new AdminError('FORBIDDEN', 'Você não pode gerar este tipo de link.');
   if (!['REPRESENTANTE', 'MARKETING'].includes(input.role) && !dist) throw new AdminError('DIST', 'Escolha o distribuidor.');
