@@ -30,8 +30,8 @@ services:
         sync: false
       - key: MAIL_FROM
         sync: false
-      - key: SUPPORT_EMAIL # e-mail de dúvidas e problemas (aparece no app e nos e-mails); se vazio, usa ADMIN_EMAIL
-        sync: false
+      - key: SUPPORT_EMAIL # e-mail de dúvidas e problemas (aparece no app e nos e-mails)
+        value: safraquest@gmail.com
       - key: ADMIN_NAME
         value: Marketing
       - key: ADMIN_EMAIL
