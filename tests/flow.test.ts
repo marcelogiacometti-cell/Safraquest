@@ -338,3 +338,37 @@ describe('links para gestor e representante', () => {
     expect((await requestLoginCode('rita@t.com')).ok).toBe(true);
   });
 });
+
+describe('equipe de Marketing (acesso total)', () => {
+  it('só Marketing convida; link de uso único; entra com e-mail e senha após aprovação', async () => {
+    const m = w.actor(w.marketing);
+    await expect(createInvite(w.actor(w.gestor), { role: 'MARKETING' })).rejects.toThrow(AdminError);
+    const inv = await createInvite(m, { role: 'MARKETING', distributorId: w.beta.d.id, days: 90, maxUses: 50 });
+    const row = (await db.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.token, inv.token)))[0];
+    expect(row.maxUses).toBe(1); expect(row.distributorId).toBeNull();
+    expect(row.expiresAt!.getTime() - Date.now()).toBeLessThanOrEqual(7 * 86_400_000 + 5000);
+    const sem = await registerViaInvite({ token: inv.token, name: 'Time Marketing', email: 'time@mkt.test', consent: false });
+    expect(sem).toMatchObject({ ok: false, reason: 'PASSWORD' });
+    const ok = await registerViaInvite({ token: inv.token, name: 'Time Marketing', email: 'time@mkt.test', consent: false, password: 'senha-do-time-1' });
+    expect(ok.ok).toBe(true);
+    expect(await registerViaInvite({ token: inv.token, name: 'Outro Time', email: 'outro@mkt.test', consent: false, password: 'senha-do-time-2' })).toMatchObject({ ok: false, reason: 'INVITE', invite: 'FULL' });
+    expect((await panelLogin('time@mkt.test', 'senha-do-time-1')).ok).toBe(false); // pendente
+    const uid = (ok as { userId: string }).userId;
+    await approveUser(m, uid);
+    expect((await panelLogin('time@mkt.test', 'senha-do-time-1')).ok).toBe(true);
+    const { loadActor } = await import('@/lib/access');
+    const novo = (await loadActor(uid))!;
+    expect(novo.role).toBe('MARKETING');
+    // o novo marketing também pode criar campanha e convidar
+    await expect(createInvite(novo, { role: 'GESTOR', distributorId: w.alfa.d.id })).resolves.toBeTruthy();
+  });
+  it('não desativa a si mesmo nem o último Marketing ativo', async () => {
+    const { deactivateUser } = await import('@/lib/admin');
+    const m = w.actor(w.marketing);
+    await expect(deactivateUser(m, w.marketing.id)).rejects.toThrow(/próprio/);
+    const others = await db.select().from(schema.users).where(eq(schema.users.role, 'MARKETING'));
+    const novo = others.find((u) => u.email === 'time@mkt.test')!;
+    await deactivateUser(m, novo.id); // há outro ativo (o próprio m): permitido
+    await expect(deactivateUser(w.actor(novo), w.marketing.id)).rejects.toThrow(); // novo já inativo/sem permissão
+  });
+});

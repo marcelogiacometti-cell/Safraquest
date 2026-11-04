@@ -106,7 +106,7 @@ export async function registerViaInvite(input: RegisterInput): Promise<RegisterR
   if (input.name.trim().split(/\s+/).length < 2) return { ok: false, reason: 'NAME' };
   const email = normalizeEmail(input.email ?? '');
   if (!email) return { ok: false, reason: 'EMAIL' };
-  const isGestor = inv.targetRole === 'GESTOR';
+  const isGestor = inv.targetRole === 'GESTOR' || inv.targetRole === 'MARKETING'; // perfis de painel: e-mail + senha
   if (!isGestor && !input.consent) return { ok: false, reason: 'CONSENT' };
   let passwordHash: string | null = null;
   if (isGestor) {

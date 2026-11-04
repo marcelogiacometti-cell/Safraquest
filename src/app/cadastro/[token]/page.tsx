@@ -14,13 +14,13 @@ export default async function Cadastro({ params }: { params: Promise<{ token: st
   const units = inv.targetRole === 'VENDEDOR' && inv.distributorId && !inv.unitId ? await db.select().from(schema.units).where(eq(schema.units.distributorId, inv.distributorId)) : [];
   return (<main className="wrap">
     <h1>Cadastro no SafraQuest</h1>
-    <p className="mu">{{ GESTOR: 'Acesso de gestor', REPRESENTANTE: 'Representante Corteva', VENDEDOR: 'Vendedor' }[inv.targetRole as string]}</p>
+    <p className="mu">{{ MARKETING: 'Equipe de Marketing (acesso total)', GESTOR: 'Acesso de gestor', REPRESENTANTE: 'Representante Corteva', VENDEDOR: 'Vendedor' }[inv.targetRole as string]}</p>
     {d && <p className="mu">{d.name}</p>}
     <div className="card"><Form action={cadastrar} submit="Enviar cadastro">
       <input type="hidden" name="token" value={token} />
       <label>Nome e sobrenome<input name="nome" autoComplete="name" required /></label>
       <label>E-mail<input name="email" type="email" autoComplete="email" required /></label>
-      {inv.targetRole === 'GESTOR' && <><label>Crie uma senha (mín. 8 caracteres)<input name="senha" type="password" autoComplete="new-password" minLength={8} required /></label></>}
+      {(inv.targetRole === 'GESTOR' || inv.targetRole === 'MARKETING') && <><label>Crie uma senha (mín. 8 caracteres)<input name="senha" type="password" autoComplete="new-password" minLength={8} required /></label></>}
       {units.length > 0 && <label>Sua unidade<select name="unidade" required defaultValue=""><option value="" disabled>Escolha…</option>{units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></label>}
       <label style={{ display: 'flex', gap: 8, fontWeight: 400 }}><input type="checkbox" name="aceite" style={{ width: 'auto' }} />
         <span>Aceito receber e-mails do SafraQuest sobre as missões semanais. Posso parar de receber a qualquer momento pelo link no rodapé de cada e-mail.</span></label>

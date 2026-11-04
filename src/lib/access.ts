@@ -49,7 +49,7 @@ export function canApprove(a: Actor, t: Target): boolean {
 }
 
 export function canCreateInvite(a: Actor, role: Role, distributorId: string | null, unitId: string | null, unitDistributor?: string | null): boolean {
-  if (a.role === 'MARKETING') return ['GESTOR', 'VENDEDOR', 'REPRESENTANTE'].includes(role);
+  if (a.role === 'MARKETING') return ['MARKETING', 'GESTOR', 'VENDEDOR', 'REPRESENTANTE'].includes(role);
   if (a.role === 'GESTOR') {
     if (role !== 'VENDEDOR') return false;
     if (!a.distributorId || distributorId !== a.distributorId) return false;

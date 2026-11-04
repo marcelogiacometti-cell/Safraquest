@@ -215,10 +215,12 @@ export async function createInvite(actor: Actor, input: { role: Role; distributo
   }
   const dist = input.distributorId ?? unitDist ?? null;
   if (!canCreateInvite(actor, input.role, dist, input.unitId ?? null, unitDist)) throw new AdminError('FORBIDDEN', 'Você não pode gerar este tipo de link.');
-  if (input.role !== 'REPRESENTANTE' && !dist) throw new AdminError('DIST', 'Escolha o distribuidor.');
+  if (!['REPRESENTANTE', 'MARKETING'].includes(input.role) && !dist) throw new AdminError('DIST', 'Escolha o distribuidor.');
+  // link de Marketing dá acesso total: uso único e validade curta
+  if (input.role === 'MARKETING') { input = { ...input, maxUses: 1, days: Math.min(input.days ?? 3, 7) }; }
   const token = randomToken(9);
   await db.insert(schema.inviteLinks).values({
-    token, targetRole: input.role, distributorId: dist, unitId: input.unitId ?? null, createdById: actor.id,
+    token, targetRole: input.role, distributorId: input.role === 'MARKETING' ? null : dist, unitId: input.role === 'MARKETING' ? null : input.unitId ?? null, createdById: actor.id,
     expiresAt: input.days ? new Date(Date.now() + input.days * 86_400_000) : null, maxUses: input.maxUses ?? null,
   });
   return { token, url: `${env.appUrl}/cadastro/${token}` };
@@ -265,6 +267,11 @@ export async function deactivateUser(actor: Actor, userId: string) {
   const okMkt = actor.role === 'MARKETING';
   const okGestor = actor.role === 'GESTOR' && actor.distributorId === u.distributorId && u.role === 'VENDEDOR';
   if (!okMkt && !okGestor) throw new AdminError('FORBIDDEN', 'Você não pode desativar este usuário.');
+  if (u.id === actor.id) throw new AdminError('SELF', 'Você não pode desativar o próprio acesso.');
+  if (u.role === 'MARKETING') {
+    const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(schema.users).where(and(eq(schema.users.role, 'MARKETING'), eq(schema.users.status, 'ACTIVE')));
+    if (n <= 1) throw new AdminError('LAST', 'É preciso manter pelo menos um usuário de Marketing ativo.');
+  }
   await db.update(schema.users).set({ status: 'LEFT', notifyOptIn: false }).where(eq(schema.users.id, userId));
 }
 

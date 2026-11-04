@@ -4,7 +4,7 @@ import { requirePanel, fmtDate } from '@/lib/web';
 import { aprovar, recusar, definirCarteira, desativar } from '../actions';
 export const dynamic = 'force-dynamic';
 export default async function Usuarios() {
-  await requirePanel(['MARKETING']);
+  const { user: me } = await requirePanel(['MARKETING']);
   const us = await db.select({ u: schema.users, d: schema.distributors.name, un: schema.units.name }).from(schema.users)
     .leftJoin(schema.distributors, eq(schema.users.distributorId, schema.distributors.id)).leftJoin(schema.units, eq(schema.users.unitId, schema.units.id));
   const dists = await db.select().from(schema.distributors);
@@ -20,7 +20,7 @@ export default async function Usuarios() {
         <td style={{ whiteSpace: 'nowrap' }}>
           {u.status === 'PENDING' && <><form action={aprovar} style={{ display: 'inline' }}><input type="hidden" name="id" value={u.id} /><button className="btn sm">Aprovar</button></form>{' '}
             <form action={recusar} style={{ display: 'inline' }}><input type="hidden" name="id" value={u.id} /><button className="btn sm sec">Recusar</button></form></>}
-          {u.status === 'ACTIVE' && u.role !== 'MARKETING' && <form action={desativar}><input type="hidden" name="id" value={u.id} /><button className="btn sm sec">Desativar</button></form>}</td></tr>))}
+          {u.status === 'ACTIVE' && u.id !== me.id && <form action={desativar}><input type="hidden" name="id" value={u.id} /><button className="btn sm sec">Desativar</button></form>}</td></tr>))}
     </tbody></table></div>
     {reps.map(({ u }) => { const mine = new Set(assigns.filter((a) => a.userId === u.id).map((a) => a.distributorId)); return (
       <div className="card" key={u.id}><h2>Carteira de {u.name}</h2><p className="mu">Canais que este representante acompanha.</p>

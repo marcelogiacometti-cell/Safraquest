@@ -25,7 +25,7 @@ export default async function Resumo() {
     <div className="card"><h2>Link de cadastro</h2>
       <Form action={gerarConvite} submit="Gerar link">
         {user.role === 'MARKETING'
-          ? <label>Quem vai se cadastrar<select name="papel" defaultValue="VENDEDOR"><option value="VENDEDOR">Vendedor</option><option value="GESTOR">Gestor de distribuidor</option><option value="REPRESENTANTE">Representante Corteva</option></select></label>
+          ? <label>Quem vai se cadastrar<select name="papel" defaultValue="VENDEDOR"><option value="VENDEDOR">Vendedor</option><option value="MARKETING">Marketing (acesso total)</option><option value="GESTOR">Gestor de distribuidor</option><option value="REPRESENTANTE">Representante Corteva</option></select></label>
           : <input type="hidden" name="papel" value="VENDEDOR" />}
         {actor.distributorId ? <input type="hidden" name="dist" value={actor.distributorId} /> : <label>Distribuidor<select name="dist" defaultValue=""><option value="">(não se aplica ao representante)</option>{dists.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label>}
         {units.length > 0 && <label>Unidade<select name="unidade" defaultValue=""><option value="">Vendedor escolhe</option>{units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></label>}
