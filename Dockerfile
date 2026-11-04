@@ -16,6 +16,7 @@ COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/cron.mjs ./cron.mjs
 EXPOSE 3000
 # Migrações e criação do usuário Marketing rodam sozinhas ao iniciar (src/instrumentation.ts)
 CMD ["node", "server.js"]
