@@ -27,3 +27,24 @@ nav.tabs{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--bd)
 nav.tabs a{text-decoration:none;font-weight:700;font-size:13px}
 .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
 .kpi{font-size:26px;font-weight:800}
+/* menu com submenu ao passar o mouse */
+.dd{position:relative;display:inline-block;margin-right:14px}
+.dd>a{margin-right:0!important}
+.ddm{display:none;position:absolute;left:-8px;top:100%;min-width:210px;background:var(--dk);border:1px solid #2c4a3a;border-radius:10px;padding:6px;z-index:30;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.dd:hover .ddm,.dd:focus-within .ddm{display:block}
+.ddm a{display:block;margin:0!important;padding:9px 12px;border-radius:8px;white-space:nowrap}
+.ddm a:hover{background:#1d3a2b}
+/* cartões de campanha */
+.cgrid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));margin-top:16px}
+.ccard{display:block;background:#fff;border:1px solid var(--bd);border-radius:18px;padding:20px;color:inherit;text-decoration:none;transition:box-shadow .15s,transform .15s}
+.ccard:hover{box-shadow:0 8px 22px rgba(18,38,28,.12);transform:translateY(-2px)}
+.ccard h3{font-size:20px;line-height:1.25;margin:14px 0 4px;color:var(--dk)}
+.pill.cz{background:#ece9e2;color:#4a4a44}.pill.lg2{background:var(--lg);color:#2a6b49}
+.mrow{display:flex;justify-content:space-between;font-size:13px;margin-top:12px;margin-bottom:4px}
+.mrow b{font-weight:800}
+.bar.t{height:9px}
+/* caixa sobreposta */
+.ovl{position:fixed;inset:0;background:rgba(10,24,17,.55);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:32px 16px;overflow:auto}
+.ovl .box{background:#fff;border-radius:18px;max-width:900px;width:100%;padding:24px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.ovl .x{position:absolute;right:14px;top:10px;font-size:26px;text-decoration:none;color:var(--mu);line-height:1;background:none;border:0;cursor:pointer}
+.ovl h2{margin-top:22px}

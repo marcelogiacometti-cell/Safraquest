@@ -90,6 +90,7 @@ export async function campaignEffectiveness(actor: Actor, f: Filters) {
       hitGain: played.length > 1 ? (played[played.length - 1].hitRate ?? 0) - (played[0].hitRate ?? 0) : null,
     },
     funnel, themes, hardest,
+    perQuestion: [...byQ].sort((a, b) => a.week - b.week),
     groups: [
       group('Cooperativas', (d) => d.type === 'COOPERATIVA'),
       group('Revendas', (d) => d.type === 'REVENDA'),

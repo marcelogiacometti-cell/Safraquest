@@ -3,7 +3,7 @@ import { db, schema } from '@/db';
 import { type Actor, canApprove, canCreateInvite, type Role } from './access';
 import { randomToken } from './crypto';
 import { env } from './env';
-import { DEFAULT_MOMENTS, planMissions } from './schedule';
+import { DEFAULT_MOMENTS, planMissions, localToUtc, toLocalParts } from './schedule';
 import { getProvider, contactOf } from './whatsapp/provider';
 
 export const QUESTIONS_PER_MISSION = 5;
@@ -127,8 +127,8 @@ export async function campaignChecklist(campaignId: string): Promise<{ ok: boole
   items.push({ ok: groups.length > 0, text: 'Pelo menos um grupo de canais selecionado' });
   const ms = await db.select().from(schema.missions).where(eq(schema.missions.campaignId, campaignId)).orderBy(asc(schema.missions.number));
   const qs = await db.select().from(schema.questions).where(eq(schema.questions.campaignId, campaignId));
-  const need = ms.length * QUESTIONS_PER_MISSION;
-  items.push({ ok: ms.length > 0 && qs.length >= need, text: need > qs.length ? `Faltam ${need - qs.length} perguntas` : 'Todas as perguntas cadastradas' });
+  const empty = ms.filter((m) => !qs.some((q) => q.missionId === m.id));
+  items.push({ ok: ms.length > 0 && empty.length === 0, text: ms.length === 0 ? 'Nenhuma pergunta programada' : empty.length ? `${empty.length} quiz(zes) sem perguntas` : `${qs.length} pergunta(s) programada(s)` });
   const moments = await db.select().from(schema.messageMoments).where(eq(schema.messageMoments.campaignId, campaignId));
   const tpls = new Map((await db.select().from(schema.waTemplates)).map((t) => [t.name, t]));
   for (const m of moments) {
@@ -154,6 +154,103 @@ export async function campaignReach(campaignId: string) {
   if (!dists.length) return { distributors: 0, sellers: 0, withConsent: 0 };
   const sellers = await db.select().from(schema.users).where(and(inArray(schema.users.distributorId, dists), eq(schema.users.role, 'VENDEDOR'), eq(schema.users.status, 'ACTIVE')));
   return { distributors: dists.length, sellers: sellers.length, withConsent: sellers.filter((s) => s.consentAt && !s.optOutAt).length };
+}
+
+// ---------------------------------------------------------------- criação de campanha por perguntas programadas
+
+export type PlanQuestion = { sendDate: string; sendTime: string; text: string; options: string[]; correct: number; explanation?: string | null; topic?: string; timeLimit?: number };
+export type CampaignPlanInput = { name: string; productName: string; objective?: string | null; materialUrl?: string | null; speedBonus?: boolean; groupIds: string[]; questions: PlanQuestion[] };
+
+const MS_DAY = 86_400_000;
+const parseDate = (d: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d ?? ''); return m ? { y: +m[1], mo: +m[2] - 1, d: +m[3] } : null; };
+const parseTime = (t: string) => { const m = /^(\d{2}):(\d{2})$/.exec(t ?? ''); return m && +m[1] < 24 && +m[2] < 60 ? { h: +m[1], mi: +m[2] } : null; };
+
+/** Cada data e hora de envio vira um quiz; perguntas com o mesmo horário ficam no mesmo quiz. Um quiz fecha 6 dias depois ou quando o próximo abre. */
+export function planFromQuestions(qs: PlanQuestion[]) {
+  const keyed = qs.map((q, i) => {
+    const d = parseDate(q.sendDate); const t = parseTime(q.sendTime);
+    if (!d || !t) throw new AdminError('Q_WHEN', `Pergunta ${i + 1}: informe a data e o horário de envio.`);
+    return { q, opensAt: localToUtc(d.y, d.mo, d.d, t.h, t.mi), idx: i };
+  }).sort((a, b) => a.opensAt.getTime() - b.opensAt.getTime() || a.idx - b.idx);
+  const groups: { opensAt: Date; items: PlanQuestion[] }[] = [];
+  for (const k of keyed) { const g = groups.find((x) => x.opensAt.getTime() === k.opensAt.getTime()); if (g) g.items.push(k.q); else groups.push({ opensAt: k.opensAt, items: [k.q] }); }
+  return groups.map((g, i) => {
+    const p = toLocalParts(g.opensAt);
+    let closesAt = localToUtc(p.y, p.m, p.d + 6, 23, 59, 59);
+    const next = groups[i + 1];
+    if (next && next.opensAt.getTime() - 1000 < closesAt.getTime()) closesAt = new Date(next.opensAt.getTime() - 1000);
+    return { number: i + 1, opensAt: g.opensAt, closesAt, questions: g.items };
+  });
+}
+
+export async function saveCampaignPlan(actor: Actor, id: string | null, input: CampaignPlanInput, finalize: boolean) {
+  if (actor.role !== 'MARKETING') throw new AdminError('FORBIDDEN', 'Só o Marketing cria campanhas.');
+  if (!input.name?.trim()) throw new AdminError('NAME', 'Dê um nome à campanha.');
+  if (!input.productName?.trim()) throw new AdminError('PRODUCT', 'Informe o tema ou produto da campanha.');
+  const [cfg] = await db.select().from(schema.waConfig).where(eq(schema.waConfig.id, 1));
+  const from = cfg?.sendFrom ?? '08:00'; const until = cfg?.sendUntil ?? '19:00';
+  for (const [i, q] of input.questions.entries()) {
+    validateQuestion({ missionId: '', text: q.text, options: q.options, correct: q.correct });
+    const t = parseTime(q.sendTime); const d = parseDate(q.sendDate);
+    if (!t || !d) throw new AdminError('Q_WHEN', `Pergunta ${i + 1}: informe a data e o horário de envio.`);
+    const hhmm = q.sendTime;
+    if (hhmm < from || hhmm > until) throw new AdminError('Q_WINDOW', `Pergunta ${i + 1}: o horário de envio precisa estar entre ${from} e ${until}.`);
+    if (new Date(Date.UTC(d.y, d.mo, d.d)).getUTCDay() === 0) throw new AdminError('Q_SUNDAY', `Pergunta ${i + 1}: não há envios aos domingos.`);
+  }
+  const plan = planFromQuestions(input.questions);
+  for (const m of plan) if (m.questions.length > QUESTIONS_PER_MISSION) throw new AdminError('FULL', `No mesmo dia e horário cabem no máximo ${QUESTIONS_PER_MISSION} perguntas. Mude o horário de algumas.`);
+  if (finalize) {
+    if (!plan.length) throw new AdminError('NO_Q', 'Adicione pelo menos uma pergunta.');
+    if (!input.groupIds.length) throw new AdminError('NO_GROUP', 'Escolha quem recebe a campanha.');
+    if (plan[0].opensAt.getTime() <= Date.now()) throw new AdminError('PAST', 'O primeiro envio precisa estar no futuro.');
+  }
+  const values = {
+    name: input.name.trim(), productName: input.productName.trim(), objective: input.objective?.trim() || null, materialUrl: input.materialUrl?.trim() || null,
+    speedBonus: !!input.speedBonus, everyWeeks: 1, minMissions: Math.max(1, Math.min(4, plan.length || 1)),
+    startDate: plan[0]?.opensAt ?? null, endDate: plan.length ? plan[plan.length - 1].closesAt : null,
+  };
+  let campaignId = id;
+  if (id) {
+    const [c] = await db.select().from(schema.campaigns).where(eq(schema.campaigns.id, id));
+    if (!c) throw new AdminError('NOT_FOUND', 'Campanha não encontrada.');
+    if (c.status !== 'DRAFT') throw new AdminError('STATE', 'Só rascunhos podem ser editados aqui.');
+    await db.update(schema.campaigns).set(values).where(eq(schema.campaigns.id, id));
+    await db.delete(schema.missions).where(eq(schema.missions.campaignId, id)); // rascunho não tem respostas; as perguntas saem em cascata
+  } else {
+    const [c] = await db.insert(schema.campaigns).values(values).returning();
+    campaignId = c.id;
+  }
+  await ensureDefaultMoments(campaignId!);
+  for (const m of plan) {
+    const [mi] = await db.insert(schema.missions).values({ campaignId: campaignId!, number: m.number, opensAt: m.opensAt, closesAt: m.closesAt }).returning();
+    for (const [i, q] of m.questions.entries()) {
+      await db.insert(schema.questions).values({
+        campaignId: campaignId!, missionId: mi.id, position: i + 1, text: q.text.trim(), options: q.options.map((o) => o.trim()), correct: q.correct,
+        explanation: q.explanation?.trim() || null, topic: q.topic?.trim() || 'Diferenciais do produto', timeLimit: q.timeLimit && q.timeLimit > 0 ? q.timeLimit : 30,
+      });
+    }
+  }
+  await setCampaignGroups(campaignId!, input.groupIds);
+  if (finalize) await scheduleCampaign(campaignId!);
+  return campaignId!;
+}
+
+/** Carrega um rascunho no formato do editor. */
+export async function loadCampaignPlan(id: string) {
+  const [c] = await db.select().from(schema.campaigns).where(eq(schema.campaigns.id, id));
+  if (!c) return null;
+  const ms = await db.select().from(schema.missions).where(eq(schema.missions.campaignId, id)).orderBy(asc(schema.missions.number));
+  const qs = await db.select().from(schema.questions).where(eq(schema.questions.campaignId, id)).orderBy(asc(schema.questions.position));
+  const groupIds = (await db.select().from(schema.campaignGroups).where(eq(schema.campaignGroups.campaignId, id))).map((g) => g.groupId);
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  const questions: PlanQuestion[] = ms.flatMap((m) => {
+    const t = toLocalParts(m.opensAt);
+    return qs.filter((q) => q.missionId === m.id).map((q) => ({
+      sendDate: `${t.y}-${p2(t.m + 1)}-${p2(t.d)}`, sendTime: `${p2(t.hh)}:${p2(t.mm)}`, text: q.text, options: q.options, correct: q.correct,
+      explanation: q.explanation, topic: q.topic, timeLimit: q.timeLimit,
+    }));
+  });
+  return { campaign: c, plan: { name: c.name, productName: c.productName, objective: c.objective, materialUrl: c.materialUrl, speedBonus: c.speedBonus, groupIds, questions } as CampaignPlanInput };
 }
 
 // ---------------------------------------------------------------- grupos de canais

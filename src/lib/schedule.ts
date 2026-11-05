@@ -38,10 +38,11 @@ export function planMissions(opts: { start: Date; end: Date; everyWeeks: number;
   return out;
 }
 
-export type MomentPlan = { weekday: number; weekOffset: number; time: string };
+export type MomentPlan = { weekday: number; weekOffset: number; time: string; kind?: string };
 
 /** Quando um momento de envio dispara, relativo à abertura da missão. */
 export function momentFireAt(mission: { opensAt: Date }, openWeekday: number, everyWeeks: number, m: MomentPlan): Date {
+  if (m.kind === 'OPENING' && m.weekOffset === 0) return mission.opensAt; // o aviso de abertura sai na data e hora programadas
   const o = toLocalParts(mission.opensAt);
   const [hh, mm] = parseHHMM(m.time);
   const delta = ((m.weekday - openWeekday + 7) % 7) + m.weekOffset * 7 * Math.max(1, everyWeeks);

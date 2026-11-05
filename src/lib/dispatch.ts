@@ -68,6 +68,7 @@ export async function dispatchDue(now = new Date()): Promise<DispatchReport> {
         const fire = momentFireAt(m, c.openWeekday, c.everyWeeks, mo);
         // janela de 6 h depois do horário combinado, para tolerar atraso do cron sem enviar fora de hora
         if (now < fire || now.getTime() - fire.getTime() > 6 * 3_600_000) continue;
+        if ((mo.kind === 'REMINDER' || mo.kind === 'LAST_CALL') && fire > m.closesAt) continue; // quiz já encerrou
         const tpl = templates.get(mo.templateName);
         if (!tpl || tpl.status !== 'APPROVED') { report.blocked.push(`Modelo ${mo.templateName} não está aprovado na Meta.`); continue; }
         report.moments++;

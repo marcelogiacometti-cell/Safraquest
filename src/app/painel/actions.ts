@@ -27,6 +27,15 @@ export async function gerarConvite(_: unknown, fd: FormData) {
   return r.error ? r : { ok: `Link: ${await baseUrl()}/cadastro/${r.data!.token}` };
 }
 
+export async function salvarPlano(id: string | null, input: admin.CampaignPlanInput, finalize: boolean): Promise<{ error?: string; id?: string }> {
+  const { actor } = await requirePanel(['MARKETING']);
+  try {
+    const cid = await admin.saveCampaignPlan(actor, id, input, finalize);
+    revalidatePath('/painel/campanhas'); revalidatePath('/painel');
+    return { id: cid };
+  } catch (e) { return { error: e instanceof Error ? e.message : 'Erro inesperado.' }; }
+}
+
 export async function criarCampanha(_: unknown, fd: FormData) {
   const { actor } = await requirePanel(['MARKETING']); void actor;
   const r = await wrap(() => admin.saveCampaign(null, { name: s(fd, 'nome'), productName: s(fd, 'produto'), objective: s(fd, 'objetivo') || null,
