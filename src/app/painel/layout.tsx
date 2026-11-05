@@ -8,7 +8,7 @@ export default async function PainelLayout({ children }: { children: React.React
   return (<>
     {inside && <nav className="top"><div className="wide">
       <b style={{ marginRight: 18 }}>🌱 SafraQuest</b>
-      <Link href="/painel">Resumo</Link><Link href="/painel/campanhas">Campanhas</Link>
+      <Link href="/painel">Resumo</Link><Link href="/painel/campanhas">Campanhas</Link><Link href="/painel/ranking">Ranking</Link>
       {(u.role === 'MARKETING' || u.role === 'GESTOR') && <Link href="/painel/usuarios">Usuários</Link>}
       {u.role === 'MARKETING' && <><Link href="/painel/correcoes">Correções</Link><Link href="/painel/estrutura">Estrutura</Link><Link href="/painel/integracao">E-mail</Link></>}
       <form action={sair} style={{ marginLeft: 'auto' }}><button className="btn sm sec">Sair</button></form>

@@ -431,6 +431,18 @@ describe('regionais', () => {
     expect((await db.select().from(schema.units).where(eq(schema.units.id, uid))).length).toBe(0);
     await expect(deleteUnit(w.alfa.us[0].id)).rejects.toThrow(/usuários/);
   });
+  it('ranking gerencial: vendedores, distribuidores, filiais e regionais, com escopo por perfil', async () => {
+    const { panelRanking } = await import('@/lib/panelRanking');
+    const all = await panelRanking(w.actor(w.marketing), { campaignId });
+    expect(all.sellers.length).toBeGreaterThan(0);
+    const pts = all.sellers.filter((x) => x.played).map((x) => x.points);
+    expect([...pts].sort((a, b) => b - a)).toEqual(pts);
+    expect(all.distributors.length).toBeGreaterThan(0);
+    const g = await panelRanking(w.actor(w.gestor), { campaignId });
+    expect(g.distributors.every((d) => d.id === w.beta.d.id)).toBe(true);
+    const sul = await panelRanking(w.actor(w.marketing), { campaignId, regionalId: w.norte.id });
+    expect(sul.totalSellers).toBeLessThanOrEqual(all.totalSellers);
+  });
   it('relatório filtra por regional', async () => {
     const { campaignEffectiveness } = await import('@/lib/effectiveness');
     const all = (await campaignEffectiveness(w.actor(w.marketing), { campaignId }))!;
