@@ -5,10 +5,18 @@ import { salvarPlano, importarPlanilha } from '../../actions';
 import type { CampaignPlanInput, PlanQuestion } from '@/lib/admin';
 
 const LET = ['A', 'B', 'C', 'D'];
-const blankQ = (): PlanQuestion & { options: string[] } => ({ sendDate: '', sendTime: '09:00', text: '', options: ['', '', '', ''], correct: 0, explanation: '', topic: '', timeLimit: 30 });
+const blankQ = (): PlanQuestion & { options: string[] } => ({ sendDate: '', sendTime: '', text: '', options: ['', '', '', ''], correct: 0, explanation: '', topic: '', timeLimit: 30 });
 const fmtDay = (d: string) => (d ? d.split('-').reverse().join('/') : '—');
 const weekday = (d: string) => (d ? ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][new Date(d + 'T12:00:00Z').getUTCDay()] : '');
 
+type J = { sendDate: string; sendTime: string; qs: PlanQuestion[] };
+const MAXQ = 5;
+const groupJ = (qs: PlanQuestion[]): J[] => {
+  const m = new Map<string, J>();
+  for (const q of qs) { const k = q.sendDate + ' ' + q.sendTime; if (!m.has(k)) m.set(k, { sendDate: q.sendDate, sendTime: q.sendTime, qs: [] }); m.get(k)!.qs.push(q); }
+  return [...m.values()].sort((a, b) => (a.sendDate + a.sendTime).localeCompare(b.sendDate + b.sendTime));
+};
+const flat = (js: J[]): PlanQuestion[] => js.flatMap((j) => j.qs.map((q) => ({ ...q, sendDate: j.sendDate, sendTime: j.sendTime })));
 type Reg = { id: string; name: string }; type Dist = { id: string; name: string; type: 'COOPERATIVA' | 'REVENDA'; regionalId: string; sellers: number };
 const TYPES: ['COOPERATIVA' | 'REVENDA', string][] = [['COOPERATIVA', 'Cooperativas'], ['REVENDA', 'Revendas']];
 
@@ -20,8 +28,11 @@ export function Builder({ regionals, dists, initial, campaignId }: { regionals: 
   const [types, setTypes] = useState<('COOPERATIVA' | 'REVENDA')[]>(initial.audience.types);
   const [picked, setPicked] = useState<string[]>(initial.audience.distributorIds);
   const [find, setFind] = useState('');
-  const [qs, setQs] = useState<PlanQuestion[]>(initial.questions);
-  const [editing, setEditing] = useState<{ idx: number | null; q: PlanQuestion } | null>(null);
+  const [js, setJs] = useState<J[]>(groupJ(initial.questions));
+  const [editing, setEditing] = useState<{ j: number; idx: number | null; q: PlanQuestion } | null>(null);
+  const [editJ, setEditJ] = useState<{ idx: number | null; sendDate: string; sendTime: string } | null>(null);
+  const [jErr, setJErr] = useState('');
+  const qs = flat(js);
   const [qErr, setQErr] = useState('');
   const [summary, setSummary] = useState(false);
   const [err, setErr] = useState('');
@@ -35,13 +46,11 @@ export function Builder({ regionals, dists, initial, campaignId }: { regionals: 
       if (!r.plan) return setImp({ errors: r.errors, warnings: r.warnings });
       const pl = r.plan;
       setF({ name: pl.name, productName: pl.productName, objective: pl.objective ?? '', materialUrl: pl.materialUrl ?? '', speedBonus: !!pl.speedBonus });
-      setRegs(pl.audience.regionalIds); setTypes(pl.audience.types); setPicked(pl.audience.distributorIds); setQs(pl.questions);
+      setRegs(pl.audience.regionalIds); setTypes(pl.audience.types); setPicked(pl.audience.distributorIds); setJs(groupJ(pl.questions));
       setImp({ warnings: r.warnings, ok: `Planilha importada: ${pl.questions.length} pergunta(s) e ${pl.audience.distributorIds.length} canal(is). Revise abaixo e clique em Finalizar campanha.` });
     });
   }
 
-  const sorted = qs.map((q, i) => ({ q, i })).sort((a, b) => (a.q.sendDate + a.q.sendTime).localeCompare(b.q.sendDate + b.q.sendTime) || a.i - b.i);
-  const quizzes = [...new Map(sorted.map(({ q }) => [q.sendDate + ' ' + q.sendTime, q])).values()].map((first) => ({ when: first, n: qs.filter((q) => q.sendDate === first.sendDate && q.sendTime === first.sendTime).length }));
 
   function saveQ() {
     if (!editing) return; const q = editing.q;
@@ -49,10 +58,18 @@ export function Builder({ regionals, dists, initial, campaignId }: { regionals: 
     if (!q.text.trim()) return setQErr('Escreva o enunciado.');
     if (opts.filter(Boolean).length < 2) return setQErr('Preencha pelo menos 2 alternativas.');
     if (!opts[q.correct]) return setQErr('Marque como correta uma alternativa preenchida.');
-    if (!q.sendDate || !q.sendTime) return setQErr('Informe a data e o horário de envio.');
     const clean = { ...q, options: opts.filter(Boolean), correct: opts.slice(0, q.correct).filter(Boolean).length };
-    setQs(editing.idx === null ? [...qs, clean] : qs.map((x, i) => (i === editing.idx ? clean : x)));
+    setJs(js.map((j, ji) => (ji !== editing.j ? j : { ...j, qs: editing.idx === null ? [...j.qs, clean] : j.qs.map((x, i) => (i === editing.idx ? clean : x)) })));
     setEditing(null); setQErr('');
+  }
+  function saveJ() {
+    if (!editJ) return;
+    if (!editJ.sendDate || !editJ.sendTime) return setJErr('Informe a data e o horário de disparo.');
+    if (editJ.sendTime < '08:00' || editJ.sendTime > '19:00') return setJErr('O horário precisa estar entre 08:00 e 19:00.');
+    if (new Date(editJ.sendDate + 'T12:00:00Z').getUTCDay() === 0) return setJErr('Não há disparos aos domingos.');
+    if (js.some((j, i) => i !== editJ.idx && j.sendDate === editJ.sendDate && j.sendTime === editJ.sendTime)) return setJErr('Já existe uma jornada nesse dia e horário.');
+    const next = editJ.idx === null ? [...js, { sendDate: editJ.sendDate, sendTime: editJ.sendTime, qs: [] }] : js.map((j, i) => (i === editJ.idx ? { ...j, sendDate: editJ.sendDate, sendTime: editJ.sendTime } : j));
+    setJs(next.sort((a, b) => (a.sendDate + a.sendTime).localeCompare(b.sendDate + b.sendTime))); setEditJ(null); setJErr('');
   }
   const inRegs = (d: Dist) => !regs.length || regs.includes(d.regionalId);
   const inTypes = (d: Dist) => !types.length || types.includes(d.type);
@@ -76,7 +93,9 @@ export function Builder({ regionals, dists, initial, campaignId }: { regionals: 
   function review() {
     setErr('');
     if (!f.name.trim() || !f.productName.trim()) return setErr('Preencha o nome e o tema da campanha.');
-    if (!qs.length) return setErr('Adicione pelo menos uma pergunta.');
+    if (!js.length) return setErr('Crie pelo menos uma jornada.');
+    const empty = js.findIndex((j) => !j.qs.length);
+    if (empty >= 0) return setErr(`A jornada ${empty + 1} está sem perguntas. Adicione perguntas ou exclua a jornada.`);
     if (!picked.length) return setErr('Escolha pelo menos um canal para receber a campanha.');
     setSummary(true);
   }
@@ -123,26 +142,39 @@ export function Builder({ regionals, dists, initial, campaignId }: { regionals: 
           <span style={{ flex: 1 }}>{d.name}</span><span className="mu">{regionals.find((r) => r.id === d.regionalId)?.name} · {d.type === 'COOPERATIVA' ? 'Cooperativa' : 'Revenda'} · {d.sellers} vendedor(es)</span></label>)}</div>
       <p style={{ margin: '10px 0 0' }}><b>{chosen.length}</b> canal(is) selecionado(s) · <b>{reach}</b> vendedor(es) ativo(s) hoje</p></div>
 
-    <div className="card"><div className="row"><h2>Perguntas ({qs.length})</h2>
-      <button type="button" className="btn sm" onClick={() => { setQErr(''); setEditing({ idx: null, q: blankQ() }); }}>＋ Adicionar nova pergunta</button></div>
-      <p className="mu">Cada pergunta tem a sua data e horário de envio. Perguntas com a mesma data e horário formam o mesmo quiz (até 5). Envios só entre 08:00 e 19:00, exceto domingos.</p>
-      {!qs.length && <p className="mu">Nenhuma pergunta ainda.</p>}
-      {sorted.map(({ q, i }, n) => <div key={i} className="row" style={{ borderTop: '1px solid var(--bd)', padding: '10px 0', alignItems: 'flex-start' }}>
-        <div><b>{n + 1}. {q.text}</b><br /><span className="mu">📅 {weekday(q.sendDate)} {fmtDay(q.sendDate)} às {q.sendTime}{q.topic ? ` · ${q.topic}` : ''} · {q.options.length} alternativas · correta: {LET[q.correct]}</span></div>
-        <div style={{ whiteSpace: 'nowrap' }}>
-          <button type="button" className="btn sm sec" onClick={() => { setQErr(''); setEditing({ idx: i, q: { ...q, options: [...q.options, '', '', '', ''].slice(0, 4) } }); }}>Editar</button>{' '}
-          <button type="button" className="btn sm sec" onClick={() => { if (confirm('Excluir esta pergunta?')) setQs(qs.filter((_, k) => k !== i)); }}>Excluir</button></div></div>)}</div>
+    <div className="card"><div className="row"><h2>Jornadas ({js.length})</h2>
+      <button type="button" className="btn sm" onClick={() => { setJErr(''); setEditJ({ idx: null, sendDate: '', sendTime: '09:00' }); }}>＋ Nova jornada</button></div>
+      <p className="mu">A campanha é um conjunto de jornadas. Cada jornada é um bloco de até {MAXQ} perguntas, enviado de uma vez na data e horário programados (08:00–19:00, exceto domingos).</p>
+      {!js.length && <p className="mu">Nenhuma jornada ainda.</p>}
+      {js.map((j, ji) => <div key={j.sendDate + j.sendTime} className="jcard" style={{ border: '1px solid var(--bd)', borderRadius: 12, padding: '12px 14px', margin: '12px 0' }}>
+        <div className="row" style={{ alignItems: 'flex-start' }}>
+          <div><b>Jornada {ji + 1}</b><br /><span className="mu">📅 {weekday(j.sendDate)} {fmtDay(j.sendDate)} às {j.sendTime} · {j.qs.length}/{MAXQ} pergunta(s)</span></div>
+          <div style={{ whiteSpace: 'nowrap' }}>
+            <button type="button" className="btn sm sec" onClick={() => { setJErr(''); setEditJ({ idx: ji, sendDate: j.sendDate, sendTime: j.sendTime }); }}>Data/horário</button>{' '}
+            <button type="button" className="btn sm sec" onClick={() => { if (confirm('Excluir esta jornada e todas as suas perguntas?')) setJs(js.filter((_, k) => k !== ji)); }}>Excluir jornada</button></div></div>
+        {j.qs.map((q, i) => <div key={i} className="row" style={{ borderTop: '1px solid var(--bd)', padding: '8px 0', alignItems: 'flex-start', marginTop: i === 0 ? 8 : 0 }}>
+          <div><b>{i + 1}. {q.text}</b><br /><span className="mu">{q.topic ? `${q.topic} · ` : ''}{q.options.length} alternativas · correta: {LET[q.correct]}</span></div>
+          <div style={{ whiteSpace: 'nowrap' }}>
+            <button type="button" className="btn sm sec" onClick={() => { setQErr(''); setEditing({ j: ji, idx: i, q: { ...q, options: [...q.options, '', '', '', ''].slice(0, 4) } }); }}>Editar</button>{' '}
+            <button type="button" className="btn sm sec" onClick={() => { if (confirm('Excluir esta pergunta?')) setJs(js.map((x, k) => (k === ji ? { ...x, qs: x.qs.filter((_, n) => n !== i) } : x))); }}>Excluir</button></div></div>)}
+        <button type="button" className="btn sm" style={{ marginTop: 8 }} disabled={j.qs.length >= MAXQ} onClick={() => { setQErr(''); setEditing({ j: ji, idx: null, q: blankQ() }); }}>＋ Adicionar pergunta</button></div>)}</div>
 
     {err && <div className="err" role="alert">{err}</div>}
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 40 }}>
       <button type="button" className="btn" disabled={pending} onClick={review}>Finalizar campanha</button>
       <button type="button" className="btn sec" disabled={pending} onClick={() => save(false)}>Salvar rascunho</button></div>
 
+    {editJ && <div className="ovl"><div className="box" style={{ maxWidth: 480 }}>
+      <button type="button" className="x" onClick={() => setEditJ(null)} aria-label="Fechar">×</button>
+      <h2 style={{ marginTop: 0 }}>{editJ.idx === null ? 'Nova jornada' : 'Data e horário da jornada'}</h2>
+      <div className="grid"><label>Data de disparo<input type="date" value={editJ.sendDate} onChange={(e) => setEditJ({ ...editJ, sendDate: e.target.value })} /></label>
+        <label>Horário de disparo<input type="time" value={editJ.sendTime} min="08:00" max="19:00" onChange={(e) => setEditJ({ ...editJ, sendTime: e.target.value })} /></label></div>
+      {jErr && <div className="err" role="alert">{jErr}</div>}
+      <div style={{ display: 'flex', gap: 10 }}><button type="button" className="btn" onClick={saveJ}>Salvar jornada</button><button type="button" className="btn sec" onClick={() => setEditJ(null)}>Cancelar</button></div></div></div>}
+
     {editing && <div className="ovl"><div className="box" style={{ maxWidth: 640 }}>
       <button type="button" className="x" onClick={() => setEditing(null)} aria-label="Fechar">×</button>
-      <h2 style={{ marginTop: 0 }}>{editing.idx === null ? 'Nova pergunta' : 'Editar pergunta'}</h2>
-      <div className="grid"><label>Data de envio<input type="date" value={editing.q.sendDate} onChange={(e) => setEditing({ ...editing, q: { ...editing.q, sendDate: e.target.value } })} /></label>
-        <label>Horário de envio<input type="time" value={editing.q.sendTime} min="08:00" max="19:00" onChange={(e) => setEditing({ ...editing, q: { ...editing.q, sendTime: e.target.value } })} /></label></div>
+      <h2 style={{ marginTop: 0 }}>{editing.idx === null ? `Nova pergunta · Jornada ${editing.j + 1}` : `Editar pergunta · Jornada ${editing.j + 1}`}</h2>
       <label>Pergunta<textarea rows={2} value={editing.q.text} onChange={(e) => setEditing({ ...editing, q: { ...editing.q, text: e.target.value } })} /></label>
       {LET.map((l, k) => <label key={l}>Alternativa {l}<div className="row" style={{ gap: 8 }}>
         <input value={editing.q.options[k] ?? ''} onChange={(e) => { const o = [...editing.q.options]; o[k] = e.target.value; setEditing({ ...editing, q: { ...editing.q, options: o } }); }} />
@@ -158,8 +190,8 @@ export function Builder({ regionals, dists, initial, campaignId }: { regionals: 
       <p><b>{f.name}</b><br /><span className="mu">Tema: {f.productName}{f.objective ? ` · ${f.objective}` : ''}</span></p>
       <p className="mu">Recebem: {chosen.length} canal(is), {reach} vendedor(es) ativo(s){regs.length ? ` · região: ${regs.map((id) => regionals.find((r) => r.id === id)?.name).join(', ')}` : ' · todas as regiões'}{types.length ? ` · ${types.map((t) => (t === 'COOPERATIVA' ? 'cooperativas' : 'revendas')).join(' e ')}` : ' · cooperativas e revendas'}</p>
       <p className="mu">Bônus de velocidade: {f.speedBonus ? 'sim' : 'não'}</p>
-      <h2>{qs.length} pergunta(s) em {quizzes.length} quiz(zes)</h2>
-      <table><tbody>{quizzes.map((z, i) => <tr key={i}><td>Quiz {i + 1}</td><td>{weekday(z.when.sendDate)} {fmtDay(z.when.sendDate)} às {z.when.sendTime}</td><td>{z.n} pergunta(s)</td></tr>)}</tbody></table>
+      <h2>{js.length} jornada(s) · {qs.length} pergunta(s)</h2>
+      <table><tbody>{js.map((j, i) => <tr key={i}><td>Jornada {i + 1}</td><td>{weekday(j.sendDate)} {fmtDay(j.sendDate)} às {j.sendTime}</td><td>{j.qs.length} pergunta(s)</td></tr>)}</tbody></table>
       <p className="mu">Ao confirmar, a campanha fica agendada e os avisos saem por e-mail nas datas programadas.</p>
       {err && <div className="err" role="alert">{err}</div>}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

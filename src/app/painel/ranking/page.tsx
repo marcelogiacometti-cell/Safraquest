@@ -24,7 +24,7 @@ export default async function Ranking({ searchParams }: { searchParams: Promise<
     <div style={{ display: 'flex', gap: 8, margin: '4px 0 12px', flexWrap: 'wrap' }}>
       {VIEWS.map(([k, label]) => <Link key={k} href={q({ v: k })} className={'btn sm' + (k === v ? '' : ' sec')}>{label}</Link>)}</div>
     <div className="card">
-      {v === 'vendedores' && <table><thead><tr><th>#</th><th>Vendedor</th><th>Distribuidor · filial</th><th>Regional</th><th>Pontos</th><th>Acerto</th><th>Quizzes</th><th>Tempo</th></tr></thead><tbody>
+      {v === 'vendedores' && <table><thead><tr><th>#</th><th>Vendedor</th><th>Distribuidor · filial</th><th>Regional</th><th>Pontos</th><th>Acerto</th><th>Jornadas</th><th>Tempo</th></tr></thead><tbody>
         {r.sellers.slice(0, 100).map((s, i) => <tr key={i}><td>{s.played ? medal(s.pos) : '—'}</td><td><b>{s.name}</b></td><td>{s.distributor}{s.unit ? ` · ${s.unit}` : ''}</td><td>{s.regional}</td>
           <td><b>{s.points}</b></td><td>{s.hitRate === null ? '—' : s.hitRate + '%'}</td><td>{s.missions}</td><td>{s.played ? fmtTime(s.timeMs) : '—'}</td></tr>)}
         {!r.sellers.length && <tr><td colSpan={8} className="mu">Nenhum vendedor neste filtro.</td></tr>}</tbody></table>}

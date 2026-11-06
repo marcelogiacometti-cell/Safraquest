@@ -30,13 +30,13 @@ export async function Detalhe({ id }: { id: string }) {
         <div className="card"><div className="kpi">{eff.kpis.reached}</div><span className="mu">vendedores alcançados</span></div>
         <div className="card"><div className="kpi">{eff.kpis.participationNow ?? '—'}{eff.kpis.participationNow !== null && '%'}</div><span className="mu">participação atual</span></div>
         <div className="card"><div className="kpi">{eff.kpis.hitRate ?? '—'}{eff.kpis.hitRate !== null && '%'}</div><span className="mu">acerto médio</span></div></div>
-      <table><thead><tr><th>Quiz</th><th>Abre</th><th>Concluíram</th><th>Participação</th><th>Acerto</th></tr></thead><tbody>
+      <table><thead><tr><th>Jornada</th><th>Abre</th><th>Concluíram</th><th>Participação</th><th>Acerto</th></tr></thead><tbody>
         {eff.weeks.map((w) => { const m = missions.find((x) => x.number === w.number); return (<tr key={w.number}><td>{w.number}</td><td>{m ? fmtDate(m.opensAt) : ''}</td><td>{w.finished}</td><td>{w.participation === null ? '—' : w.participation + '%'}</td><td>{w.hitRate === null ? '—' : w.hitRate + '%'}</td></tr>); })}</tbody></table></>
       : <p className="mu">A campanha ainda não começou. Os quizzes abrem nas datas programadas:</p>}
-    {(!eff || c.status === 'SCHEDULED') && <table><tbody>{missions.map((m) => <tr key={m.id}><td>Quiz {m.number}</td><td>{fmtDate(m.opensAt)}</td></tr>)}</tbody></table>}
+    {(!eff || c.status === 'SCHEDULED') && <table><tbody>{missions.map((m) => <tr key={m.id}><td>Jornada {m.number}</td><td>{fmtDate(m.opensAt)}</td></tr>)}</tbody></table>}
 
     {eff && eff.perQuestion.length > 0 && <><h2>Performance por pergunta</h2>
-      <table><thead><tr><th>Quiz</th><th>Pergunta</th><th>Tema</th><th>Respostas</th><th>Acerto</th></tr></thead><tbody>
+      <table><thead><tr><th>Jornada</th><th>Pergunta</th><th>Tema</th><th>Respostas</th><th>Acerto</th></tr></thead><tbody>
         {eff.perQuestion.map((q) => <tr key={q.id}><td>{q.week}</td><td>{q.text}</td><td>{q.topic}</td><td>{q.answers}</td><td><b>{q.rate === null ? '—' : q.rate + '%'}</b></td></tr>)}</tbody></table></>}
 
     {rk.distributors.length > 0 && <><h2>Ranking dos distribuidores</h2>
