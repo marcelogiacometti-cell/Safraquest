@@ -5,5 +5,6 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 export default {
   output: 'standalone',
   serverExternalPackages: ['pg', 'bcryptjs', 'exceljs'],
+  outputFileTracingIncludes: { '/painel/campanhas/modelo': ['./node_modules/*/require.mjs'], '/painel/campanhas/nova': ['./node_modules/*/require.mjs'] },
   webpack(config) { config.resolve.alias['@'] = path.join(root, 'src'); return config; },
 };
