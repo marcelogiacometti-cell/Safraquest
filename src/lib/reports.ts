@@ -7,7 +7,8 @@ export type ReportKindIn = 'ERROR' | 'CONFUSING' | 'OUTDATED' | 'OTHER' | 'SUGGE
 
 export async function submitReport(userId: string, input: { questionId?: string | null; kind: ReportKindIn; text?: string; topic?: string }) {
   if (input.kind === 'SUGGESTION' && !(input.text ?? '').trim()) throw new AdminError('TEXT', 'Escreva a sua sugestão.');
-  if (input.kind !== 'SUGGESTION' && !input.questionId) throw new AdminError('Q', 'Escolha a pergunta.');
+  if (['ERROR', 'CONFUSING', 'OUTDATED'].includes(input.kind) && !input.questionId) throw new AdminError('Q', 'Escolha a pergunta.');
+  if (input.kind === 'OTHER' && !(input.text ?? '').trim()) throw new AdminError('TEXT', 'Escreva a sua mensagem.');
   if ((input.text ?? '').length > 1500) throw new AdminError('LEN', 'Texto muito longo.');
   // evita repetição: o mesmo vendedor não abre dois relatos abertos para a mesma pergunta
   if (input.questionId) {
@@ -22,6 +23,7 @@ export type ReportAction =
   | { type: 'FIX'; text?: string; options?: string[]; correct?: number; explanation?: string; note?: string }
   | { type: 'VOID'; note?: string }
   | { type: 'DISCARD'; note: string }
+  | { type: 'ACK'; note?: string }
   | { type: 'ASK_MORE'; note: string }
   | { type: 'TO_QUESTION'; missionId: string; text: string; options: string[]; correct: number; explanation?: string };
 
@@ -47,6 +49,11 @@ export async function resolveReport(reportId: string, action: ReportAction) {
   let notified = 0;
   if (action.type === 'ASK_MORE') {
     await db.update(schema.questionReports).set({ status: 'REVIEW', resolution: action.note }).where(eq(schema.questionReports.id, reportId));
+    return { notified };
+  }
+  if (action.type === 'ACK') {
+    await db.update(schema.questionReports).set({ status: 'RESOLVED', resolution: action.note || 'Agradecido', resolvedAt: now }).where(eq(schema.questionReports.id, reportId));
+    notified = await notify([r.userId], 'Obrigado pela sua mensagem! ' + (action.note ?? ''));
     return { notified };
   }
   if (action.type === 'DISCARD') {

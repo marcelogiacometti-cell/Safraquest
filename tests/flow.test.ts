@@ -490,6 +490,16 @@ describe('regionais', () => {
     await deleteUser(mkt, r.id);
     expect((await db.select().from(schema.users).where(eq(schema.users.id, r.id))).length).toBe(0);
   });
+  it('sugestões gerais: qualquer usuário envia, só Marketing encerra', async () => {
+    const { submitReport, resolveReport, reportQueue } = await import('@/lib/reports');
+    await expect(submitReport(w.gestor.id, { kind: 'SUGGESTION', text: '  ' })).rejects.toThrow(/sugestão/i);
+    await expect(submitReport(w.gestor.id, { kind: 'OTHER', text: '' })).rejects.toThrow(/mensagem/i);
+    const id = await submitReport(w.gestor.id, { kind: 'OTHER', text: 'O e-mail demorou a chegar' });
+    expect((await reportQueue('OPEN')).some((x) => x.r.id === id)).toBe(true);
+    await resolveReport(id, { type: 'ACK', note: 'Vamos olhar.' });
+    const [r] = await db.select().from(schema.questionReports).where(eq(schema.questionReports.id, id));
+    expect([r.status, r.resolution]).toEqual(['RESOLVED', 'Vamos olhar.']);
+  });
   it('relatório filtra por regional', async () => {
     const { campaignEffectiveness } = await import('@/lib/effectiveness');
     const all = (await campaignEffectiveness(w.actor(w.marketing), { campaignId }))!;

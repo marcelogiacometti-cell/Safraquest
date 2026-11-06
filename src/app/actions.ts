@@ -74,8 +74,9 @@ export async function responder(missionId: string, questionId: string, chosen: n
 
 export async function reportar(_: unknown, fd: FormData) {
   const u = await requireMember();
-  const kind = String(fd.get('tipo') ?? 'OTHER') as 'ERROR' | 'CONFUSING' | 'OUTDATED' | 'OTHER' | 'SUGGESTION';
-  await submitReport(u.id, { questionId: (fd.get('pergunta') as string) || null, kind, text: String(fd.get('texto') ?? ''), topic: String(fd.get('tema') ?? '') });
+  const kind = String(fd.get('tipo') ?? 'SUGGESTION') === 'OTHER' ? 'OTHER' : 'SUGGESTION';
+  try { await submitReport(u.id, { questionId: (fd.get('pergunta') as string) || null, kind, text: String(fd.get('texto') ?? ''), topic: String(fd.get('tema') ?? '') }); }
+  catch (e) { return { error: e instanceof Error ? e.message : 'Não foi possível enviar.' }; }
   return { ok: 'Recebemos! Obrigado por ajudar a melhorar o quiz.' };
 }
 export async function pausar(_: unknown, fd: FormData) { const u = await requireMember(); await pauseNotifications(u.id, Number(fd.get('dias') ?? 7)); return { ok: 'Avisos pausados.' }; }

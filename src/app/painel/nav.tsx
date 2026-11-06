@@ -23,6 +23,7 @@ export function PainelNav({ role, name }: { role: string; name: string }) {
     { href: '/painel/campanhas', label: 'Campanhas', icon: 'campanhas', sub: [{ href: '/painel/campanhas', label: 'Campanhas cadastradas' }, ...(mkt ? [{ href: '/painel/campanhas/nova', label: 'Nova campanha' }] : [])] },
     { href: '/painel/ranking', label: 'Ranking', icon: 'ranking' },
     ...(mkt || role === 'GESTOR' ? [{ href: '/painel/usuarios', label: 'Usuários', icon: 'usuarios', sub: [{ href: '/painel/usuarios', label: 'Usuários cadastrados' }, { href: '/painel/usuarios/adicionar', label: 'Adicionar usuários' }] }] : []),
+    ...(!mkt ? [{ href: '/painel/sugestoes', label: 'Enviar sugestão', icon: 'correcoes' }] : []),
     ...(mkt ? [{ href: '/painel/correcoes', label: 'Correções', icon: 'correcoes' }, { href: '/painel/estrutura', label: 'Estrutura', icon: 'estrutura' }, { href: '/painel/integracao', label: 'E-mail', icon: 'email' }] : []),
   ];
   return (<>

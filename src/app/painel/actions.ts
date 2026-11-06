@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from '@/db';
 import { requirePanel, baseUrl } from '@/lib/web';
 import * as admin from '@/lib/admin';
-import { resolveReport, type ReportAction } from '@/lib/reports';
+import { resolveReport, submitReport, type ReportAction } from '@/lib/reports';
 import { closeApuracao, publishWinners } from '@/lib/winners';
 import { encrypt, randomToken } from '@/lib/crypto';
 import { getProvider, mapTemplateStatus } from '@/lib/whatsapp/provider';
@@ -62,7 +62,7 @@ export async function publicarVencedores(fd: FormData) { await requirePanel(['MA
 export async function resolver(fd: FormData) {
   await requirePanel(['MARKETING']);
   const t = s(fd, 'acao'); const note = s(fd, 'nota');
-  const action: ReportAction = t === 'VOID' ? { type: 'VOID', note } : t === 'DISCARD' ? { type: 'DISCARD', note: note || 'Sem procedência.' }
+  const action: ReportAction = t === 'ACK' ? { type: 'ACK', note } : t === 'VOID' ? { type: 'VOID', note } : t === 'DISCARD' ? { type: 'DISCARD', note: note || 'Sem procedência.' }
     : t === 'ASK_MORE' ? { type: 'ASK_MORE', note: note || 'Pode detalhar?' } : { type: 'FIX', note, correct: fd.get('certa') ? Number(s(fd, 'certa')) : undefined };
   await wrap(() => resolveReport(s(fd, 'id'), action)); revalidatePath('/painel/correcoes');
 }
@@ -157,6 +157,12 @@ export async function excluirFilial(_: unknown, fd: FormData) {
   await requirePanel(['MARKETING']);
   const r = await wrap(() => admin.deleteUnit(s(fd, 'id')));
   revalidatePath('/painel/estrutura'); return r.error ? r : { ok: 'Filial excluída.' };
+}
+export async function enviarSugestao(_: unknown, fd: FormData) {
+  const { user } = await requirePanel();
+  const kind = s(fd, 'tipo') === 'OTHER' ? 'OTHER' : 'SUGGESTION';
+  const r = await wrap(() => submitReport(user.id, { kind, text: String(fd.get('texto') ?? ''), topic: s(fd, 'tema') }));
+  revalidatePath('/painel/correcoes'); return r.error ? r : { ok: 'Recebemos! Obrigado pela contribuição.' };
 }
 export async function criarUsuario(_: unknown, fd: FormData) {
   const { actor } = await requirePanel(['MARKETING', 'GESTOR']);
