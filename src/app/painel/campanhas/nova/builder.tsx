@@ -1,7 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { salvarPlano } from '../../actions';
+import { salvarPlano, importarPlanilha } from '../../actions';
 import type { CampaignPlanInput, PlanQuestion } from '@/lib/admin';
 
 const LET = ['A', 'B', 'C', 'D'];
@@ -25,6 +25,20 @@ export function Builder({ regionals, dists, initial, campaignId }: { regionals: 
   const [qErr, setQErr] = useState('');
   const [summary, setSummary] = useState(false);
   const [err, setErr] = useState('');
+  const [imp, setImp] = useState<{ errors?: string[]; warnings?: string[]; ok?: string }>({});
+  function doImport(file: File | undefined) {
+    if (!file) return; setImp({});
+    const fd = new FormData(); fd.set('arquivo', file);
+    start(async () => {
+      const r = await importarPlanilha(fd);
+      if (r.error) return setImp({ errors: [r.error] });
+      if (!r.plan) return setImp({ errors: r.errors, warnings: r.warnings });
+      const pl = r.plan;
+      setF({ name: pl.name, productName: pl.productName, objective: pl.objective ?? '', materialUrl: pl.materialUrl ?? '', speedBonus: !!pl.speedBonus });
+      setRegs(pl.audience.regionalIds); setTypes(pl.audience.types); setPicked(pl.audience.distributorIds); setQs(pl.questions);
+      setImp({ warnings: r.warnings, ok: `Planilha importada: ${pl.questions.length} pergunta(s) e ${pl.audience.distributorIds.length} canal(is). Revise abaixo e clique em Finalizar campanha.` });
+    });
+  }
 
   const sorted = qs.map((q, i) => ({ q, i })).sort((a, b) => (a.q.sendDate + a.q.sendTime).localeCompare(b.q.sendDate + b.q.sendTime) || a.i - b.i);
   const quizzes = [...new Map(sorted.map(({ q }) => [q.sendDate + ' ' + q.sendTime, q])).values()].map((first) => ({ when: first, n: qs.filter((q) => q.sendDate === first.sendDate && q.sendTime === first.sendTime).length }));
@@ -69,6 +83,16 @@ export function Builder({ regionals, dists, initial, campaignId }: { regionals: 
   const set = (k: keyof typeof f, v: string | boolean) => setF({ ...f, [k]: v });
 
   return (<>
+    <div className="card"><h2>Importar de Excel</h2>
+      <p className="mu">Cadastre a campanha inteira numa planilha: baixe o modelo, preencha e envie. Você revisa tudo aqui antes de finalizar.</p>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <a className="btn sm sec" href="/painel/campanhas/modelo">⬇ Baixar modelo (.xlsx)</a>
+        <label className="btn sm" style={{ cursor: 'pointer', margin: 0 }}>{pending ? 'Lendo…' : '⬆ Enviar planilha preenchida'}
+          <input type="file" accept=".xlsx" style={{ display: 'none' }} disabled={pending} onChange={(e) => { doImport(e.target.files?.[0]); e.target.value = ''; }} /></label></div>
+      {imp.ok && <p className="ok" style={{ marginTop: 10 }}>{imp.ok}</p>}
+      {imp.warnings?.map((w, i) => <p key={i} className="mu" style={{ margin: '4px 0' }}>⚠ {w}</p>)}
+      {!!imp.errors?.length && <div className="err" style={{ marginTop: 10 }}><b>Corrija a planilha e envie de novo:</b><ul style={{ margin: '6px 0 0 18px' }}>{imp.errors.map((e, i) => <li key={i}>{e}</li>)}</ul></div>}</div>
+
     <div className="card"><h2>Dados da campanha</h2>
       <label>Nome da campanha<input value={f.name} onChange={(e) => set('name', e.target.value)} placeholder="Ex.: Semana 43 · Lançamento Nutri+" /></label>
       <label>Tema / produto lançamento<input value={f.productName} onChange={(e) => set('productName', e.target.value)} /></label>

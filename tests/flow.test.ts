@@ -514,3 +514,27 @@ describe('regionais', () => {
     expect(all.groups.some((g) => g.label === 'Centro Sul')).toBe(true);
   });
 });
+
+describe('importação Excel', () => {
+  it('gera modelo e valida planilha', async () => {
+    const { buildTemplate, parseCampaignWorkbook } = await import('../src/lib/excel');
+    const ExcelJS = (await import('exceljs')).default;
+    const regs = [{ id: 'r1', name: 'Sul' }]; const dists = [{ id: 'd1', name: 'Coop Alfa', type: 'COOPERATIVA' as const, regionalId: 'r1' }, { id: 'd2', name: 'Revenda Beta', type: 'REVENDA' as const, regionalId: 'r1' }];
+    const tpl = await buildTemplate(regs, dists);
+    const bad = await parseCampaignWorkbook(tpl, regs, dists);
+    expect(bad.plan).toBeUndefined(); expect(bad.errors.join()).toContain('Nome da campanha');
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load(tpl as unknown as ArrayBuffer);
+    const c = wb.getWorksheet('Campanha')!; c.getCell('B2').value = 'Semana 1'; c.getCell('B3').value = 'Nutri+'; c.getCell('B6').value = 'Sim'; c.getCell('B8').value = 'cooperativas';
+    const p = wb.getWorksheet('Perguntas')!;
+    p.addRow([new Date(Date.UTC(2026, 10, 9)), '09:00', 'Q1?', 'a', 'b', '', 'd', 'D', 'Dose', 20, 'ok']);
+    p.addRow(['10/11/2026', new Date(Date.UTC(1899, 11, 30, 10, 30)), 'Q2?', 'a', 'b', '', '', 'B']);
+    const ok = await parseCampaignWorkbook(Buffer.from(await wb.xlsx.writeBuffer()), regs, dists);
+    expect(ok.errors).toEqual([]); const pl = ok.plan!;
+    expect(pl.speedBonus).toBe(true); expect(pl.audience.distributorIds).toEqual(['d1']); expect(pl.audience.types).toEqual(['COOPERATIVA']);
+    expect(pl.questions).toHaveLength(2); expect(pl.questions[0]).toMatchObject({ sendDate: '2026-11-09', sendTime: '09:00', options: ['a', 'b', 'd'], correct: 2, timeLimit: 20 });
+    expect(pl.questions[1]).toMatchObject({ sendDate: '2026-11-10', sendTime: '10:30', correct: 1 });
+    p.addRow(['15/11/2026', '09:00', 'Q3?', 'a', 'b', '', '', 'C']); p.addRow(['16/11/2026', '25:00', 'Q4?', 'a', 'b', '', '', 'A']);
+    const e = await parseCampaignWorkbook(Buffer.from(await wb.xlsx.writeBuffer()), regs, dists);
+    expect(e.errors.join('|')).toMatch(/domingo/); expect(e.errors.join('|')).toMatch(/\(C\) está em branco/); expect(e.errors.join('|')).toMatch(/horário inválido/);
+  });
+});

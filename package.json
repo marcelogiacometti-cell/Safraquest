@@ -18,6 +18,7 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.45.4",
+    "exceljs": "^4.4.0",
     "jose": "^6.2.13",
     "next": "^15.5.28",
     "nodemailer": "^10.3.1",

@@ -36,6 +36,18 @@ export async function salvarPlano(id: string | null, input: admin.CampaignPlanIn
   } catch (e) { return { error: e instanceof Error ? e.message : 'Erro inesperado.' }; }
 }
 
+export async function importarPlanilha(fd: FormData): Promise<{ error?: string; errors?: string[]; warnings?: string[]; plan?: admin.CampaignPlanInput }> {
+  await requirePanel(['MARKETING']);
+  const file = fd.get('arquivo');
+  if (!(file instanceof File) || !file.size) return { error: 'Escolha o arquivo .xlsx.' };
+  if (file.size > 2_000_000) return { error: 'Arquivo muito grande (máx. 2 MB).' };
+  if (!/\.xlsx$/i.test(file.name)) return { error: 'Envie um arquivo .xlsx (modelo baixado no painel).' };
+  const { loadImportContext } = await import('@/lib/importCtx'); const { parseCampaignWorkbook } = await import('@/lib/excel');
+  const { regs, dists } = await loadImportContext();
+  const r = await parseCampaignWorkbook(Buffer.from(await file.arrayBuffer()), regs, dists);
+  return r.plan ? { plan: r.plan, warnings: r.warnings } : { errors: r.errors, warnings: r.warnings };
+}
+
 export async function criarCampanha(_: unknown, fd: FormData) {
   const { actor } = await requirePanel(['MARKETING']); void actor;
   const r = await wrap(() => admin.saveCampaign(null, { name: s(fd, 'nome'), productName: s(fd, 'produto'), objective: s(fd, 'objetivo') || null,

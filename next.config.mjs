@@ -4,6 +4,6 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 /** @type {import('next').NextConfig} */
 export default {
   output: 'standalone',
-  serverExternalPackages: ['pg', 'bcryptjs'],
+  serverExternalPackages: ['pg', 'bcryptjs', 'exceljs'],
   webpack(config) { config.resolve.alias['@'] = path.join(root, 'src'); return config; },
 };
