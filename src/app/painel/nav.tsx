@@ -22,7 +22,7 @@ export function PainelNav({ role, name }: { role: string; name: string }) {
     { href: '/painel', label: 'Resumo', icon: 'resumo' },
     { href: '/painel/campanhas', label: 'Campanhas', icon: 'campanhas', sub: [{ href: '/painel/campanhas', label: 'Campanhas cadastradas' }, ...(mkt ? [{ href: '/painel/campanhas/nova', label: 'Nova campanha' }] : [])] },
     { href: '/painel/ranking', label: 'Ranking', icon: 'ranking' },
-    ...(mkt || role === 'GESTOR' ? [{ href: '/painel/usuarios', label: 'Usuários', icon: 'usuarios' }] : []),
+    ...(mkt || role === 'GESTOR' ? [{ href: '/painel/usuarios', label: 'Usuários', icon: 'usuarios', sub: [{ href: '/painel/usuarios', label: 'Usuários cadastrados' }, { href: '/painel/usuarios/adicionar', label: 'Adicionar usuários' }] }] : []),
     ...(mkt ? [{ href: '/painel/correcoes', label: 'Correções', icon: 'correcoes' }, { href: '/painel/estrutura', label: 'Estrutura', icon: 'estrutura' }, { href: '/painel/integracao', label: 'E-mail', icon: 'email' }] : []),
   ];
   return (<>
@@ -31,7 +31,7 @@ export function PainelNav({ role, name }: { role: string; name: string }) {
       {items.map((it) => { const on = is(it.href); return (
         <div key={it.href} className={'sg' + (on ? ' on' : '')}>
           <Link href={it.href} className={'si' + (on ? ' act' : '')}>{ICONS[it.icon]}<span>{it.label}</span></Link>
-          {it.sub && <div className="ssub">{it.sub.map((s) => <Link key={s.href} href={s.href} className={path === s.href || (s.href === '/painel/campanhas' && path.startsWith('/painel/campanhas') && path !== '/painel/campanhas/nova') ? 'cur' : ''}>{s.label}</Link>)}</div>}
+          {it.sub && <div className="ssub">{it.sub.map((s) => <Link key={s.href} href={s.href} className={path === s.href || (s.href === it.href && path.startsWith(it.href) && !it.sub!.some((o) => o.href !== it.href && path.startsWith(o.href))) ? 'cur' : ''}>{s.label}</Link>)}</div>}
         </div>); })}
     </nav>
     <div className="me2"><span className="mu2">{role === 'MARKETING' ? 'Marketing' : role === 'GESTOR' ? 'Gestor' : role === 'REGIONAL' ? 'Regional' : role === 'DIRETORIA' ? 'Diretoria' : role}</span><b>{name}</b></div>

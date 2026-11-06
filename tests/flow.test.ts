@@ -468,6 +468,28 @@ describe('regionais', () => {
     await expect(saveCampaignPlan(w.actor(w.marketing), id, input, false)).rejects.toThrow(/rascunhos/);
     await expect(saveCampaignPlan(w.actor(w.gestor), null, input, false)).rejects.toThrow(/Marketing/);
   });
+  it('usuários: cadastro manual, edição e exclusão com permissões', async () => {
+    const { createUserManually, updateUser, deleteUser } = await import('@/lib/admin');
+    const mkt = w.actor(w.marketing);
+    const unit = (await db.select().from(schema.units).where(eq(schema.units.distributorId, w.beta.d.id)))[0];
+    const r = await createUserManually(mkt, { name: 'Manual Um', email: 'MANUAL1@teste.com', role: 'VENDEDOR', distributorId: w.beta.d.id, unitId: unit.id, consent: true });
+    const [u] = await db.select().from(schema.users).where(eq(schema.users.id, r.id));
+    expect([u.email, u.status, u.unitId, u.notifyOptIn]).toEqual(['manual1@teste.com', 'ACTIVE', unit.id, true]);
+    await expect(createUserManually(mkt, { name: 'Dup', email: 'manual1@teste.com', role: 'VENDEDOR', distributorId: w.beta.d.id, unitId: unit.id })).rejects.toThrow(/Já existe/);
+    await expect(createUserManually(mkt, { name: 'Sem filial', email: 'sf@teste.com', role: 'VENDEDOR', distributorId: w.beta.d.id })).rejects.toThrow(/filial/i);
+    await expect(createUserManually(mkt, { name: 'G', email: 'g1@teste.com', role: 'GESTOR', distributorId: w.beta.d.id, password: 'curta' })).rejects.toThrow(/senha/i);
+    const g = w.actor(w.gestor);
+    await expect(createUserManually(g, { name: 'X', email: 'x1@teste.com', role: 'GESTOR', distributorId: w.beta.d.id, password: 'senha-longa-1' })).rejects.toThrow(/categoria/i);
+    await updateUser(mkt, r.id, { name: 'Manual Dois', email: 'manual2@teste.com', distributorId: w.beta.d.id, unitId: unit.id, active: false });
+    const [u2] = await db.select().from(schema.users).where(eq(schema.users.id, r.id));
+    expect([u2.name, u2.email, u2.status, u2.notifyOptIn]).toEqual(['Manual Dois', 'manual2@teste.com', 'LEFT', false]);
+    await updateUser(mkt, r.id, { name: 'Manual Dois', email: 'manual2@teste.com', distributorId: w.beta.d.id, unitId: unit.id, active: true });
+    expect((await db.select().from(schema.users).where(eq(schema.users.id, r.id)))[0].status).toBe('ACTIVE');
+    await expect(updateUser(mkt, w.marketing.id, { name: 'M', email: 'mkt@corteva.test', active: false })).rejects.toThrow(/próprio|pelo menos/);
+    await expect(deleteUser(mkt, w.marketing.id)).rejects.toThrow(/próprio/);
+    await deleteUser(mkt, r.id);
+    expect((await db.select().from(schema.users).where(eq(schema.users.id, r.id))).length).toBe(0);
+  });
   it('relatório filtra por regional', async () => {
     const { campaignEffectiveness } = await import('@/lib/effectiveness');
     const all = (await campaignEffectiveness(w.actor(w.marketing), { campaignId }))!;

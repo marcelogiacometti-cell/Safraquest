@@ -158,4 +158,23 @@ export async function excluirFilial(_: unknown, fd: FormData) {
   const r = await wrap(() => admin.deleteUnit(s(fd, 'id')));
   revalidatePath('/painel/estrutura'); return r.error ? r : { ok: 'Filial excluída.' };
 }
+export async function criarUsuario(_: unknown, fd: FormData) {
+  const { actor } = await requirePanel(['MARKETING', 'GESTOR']);
+  const r = await wrap(() => admin.createUserManually(actor, {
+    name: s(fd, 'nome'), email: s(fd, 'email'), role: s(fd, 'papel') as never, distributorId: s(fd, 'distribuidor') || null, unitId: s(fd, 'filial') || null,
+    password: String(fd.get('senha') ?? ''), consent: fd.get('consent') === 'on' }));
+  revalidatePath('/painel/usuarios');
+  if (r.error) return r;
+  return { ok: r.data?.notified ? 'Usuário cadastrado e avisado por e-mail.' : 'Usuário cadastrado. Ele já pode entrar com o e-mail cadastrado.' };
+}
+export async function editarUsuario(_: unknown, fd: FormData) {
+  const { actor } = await requirePanel(['MARKETING', 'GESTOR']);
+  const r = await wrap(() => admin.updateUser(actor, s(fd, 'id'), { name: s(fd, 'nome'), email: s(fd, 'email'), distributorId: s(fd, 'distribuidor') || null, unitId: s(fd, 'filial') || null, active: s(fd, 'status') === 'ACTIVE' }));
+  revalidatePath('/painel/usuarios'); return r.error ? r : { ok: 'Usuário atualizado.' };
+}
+export async function excluirUsuario(_: unknown, fd: FormData) {
+  const { actor } = await requirePanel(['MARKETING', 'GESTOR']);
+  const r = await wrap(() => admin.deleteUser(actor, s(fd, 'id')));
+  revalidatePath('/painel/usuarios'); return r.error ? r : { ok: 'Usuário excluído.' };
+}
 export async function moverDistribuidor(fd: FormData) { await requirePanel(['MARKETING']); await wrap(() => admin.setDistributorRegional(s(fd, 'id'), s(fd, 'regional'))); revalidatePath('/painel/estrutura'); }

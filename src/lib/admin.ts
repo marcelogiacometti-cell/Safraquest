@@ -5,6 +5,8 @@ import { randomToken } from './crypto';
 import { env } from './env';
 import { DEFAULT_MOMENTS, planMissions, localToUtc, toLocalParts } from './schedule';
 import { getProvider, contactOf } from './whatsapp/provider';
+import { normalizeEmail } from './mail';
+import { hashPassword } from './auth';
 
 export const QUESTIONS_PER_MISSION = 5;
 
@@ -431,6 +433,96 @@ export async function moveUserToUnit(actor: Actor, userId: string, unitId: strin
   if (!okMkt && !okGestor) throw new AdminError('FORBIDDEN', 'Você não pode mover este vendedor.');
   if (un.distributorId !== u.distributorId && !okMkt) throw new AdminError('FORBIDDEN', 'Só o Marketing move entre distribuidores.');
   await db.update(schema.users).set({ unitId, distributorId: un.distributorId }).where(eq(schema.users.id, userId));
+}
+
+export type ManualUserInput = { name: string; email: string; role: Role; distributorId?: string | null; unitId?: string | null; password?: string; consent?: boolean };
+
+async function resolveUnit(role: Role, distributorId: string | null, unitId: string | null) {
+  let dist = distributorId; let unit = unitId;
+  if (unit) {
+    const [un] = await db.select().from(schema.units).where(eq(schema.units.id, unit));
+    if (!un) throw new AdminError('UNIT', 'Filial não encontrada.');
+    if (dist && dist !== un.distributorId) throw new AdminError('UNIT', 'Essa filial não pertence ao distribuidor escolhido.');
+    dist = un.distributorId;
+  }
+  if (['VENDEDOR', 'GESTOR'].includes(role) && !dist) throw new AdminError('DIST', 'Escolha o distribuidor.');
+  if (role === 'VENDEDOR' && !unit) throw new AdminError('UNIT', 'Escolha a filial do vendedor.');
+  return { dist: dist ?? null, unit: unit ?? null };
+}
+const canManage = (actor: Actor, t: { role: string; distributorId: string | null }) =>
+  actor.role === 'MARKETING' || (actor.role === 'GESTOR' && t.role === 'VENDEDOR' && !!actor.distributorId && actor.distributorId === t.distributorId);
+
+/** Cadastro manual: a pessoa já entra aprovada. */
+export async function createUserManually(actor: Actor, input: ManualUserInput) {
+  const name = input.name?.trim(); const email = normalizeEmail(input.email ?? '');
+  if (!name) throw new AdminError('NAME', 'Informe o nome.');
+  if (!email) throw new AdminError('EMAIL', 'Informe um e-mail válido.');
+  const role = input.role;
+  const allowed: Role[] = actor.role === 'MARKETING' ? ['MARKETING', 'GESTOR', 'VENDEDOR', 'REPRESENTANTE'] : actor.role === 'GESTOR' ? ['VENDEDOR'] : [];
+  if (!allowed.includes(role)) throw new AdminError('FORBIDDEN', 'Você não pode cadastrar esta categoria.');
+  const { dist, unit } = await resolveUnit(role, actor.role === 'GESTOR' ? actor.distributorId : input.distributorId ?? null, input.unitId ?? null);
+  if (actor.role === 'GESTOR' && dist !== actor.distributorId) throw new AdminError('FORBIDDEN', 'Você só cadastra no seu distribuidor.');
+  const needsPw = role === 'GESTOR' || role === 'MARKETING';
+  if (needsPw && (input.password ?? '').length < 8) throw new AdminError('PASSWORD', 'Defina uma senha inicial de pelo menos 8 caracteres.');
+  const [dup] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, email));
+  if (dup) throw new AdminError('DUP', 'Já existe um usuário com esse e-mail.');
+  const now = new Date();
+  const [u] = await db.insert(schema.users).values({
+    name, email, role, status: 'ACTIVE', distributorId: dist, unitId: unit, passwordHash: needsPw ? await hashPassword(input.password!) : null,
+    invitedVia: 'manual', approvedAt: now, approvedById: actor.id, consentAt: input.consent ? now : null, notifyOptIn: !!input.consent,
+  }).returning();
+  if (input.consent) await db.insert(schema.consentLogs).values({ userId: u.id, kind: 'GRANT', source: `manual:${actor.id}` });
+  let notified = false;
+  const [tpl] = await db.select().from(schema.waTemplates).where(eq(schema.waTemplates.name, 'cadastro_aprovado'));
+  if (contactOf(u) && tpl?.status === 'APPROVED') {
+    notified = (await (await getProvider()).sendTemplate(contactOf(u)!, 'cadastro_aprovado', [u.name.split(' ')[0], `${env.appUrl}${role === 'GESTOR' || role === 'MARKETING' ? '/painel/login' : '/entrar'}`])).ok;
+  }
+  return { id: u.id, notified };
+}
+
+export async function updateUser(actor: Actor, userId: string, input: { name: string; email: string; distributorId?: string | null; unitId?: string | null; active: boolean }) {
+  const [u] = await db.select().from(schema.users).where(eq(schema.users.id, userId));
+  if (!u) throw new AdminError('NOT_FOUND', 'Usuário não encontrado.');
+  if (!canManage(actor, u)) throw new AdminError('FORBIDDEN', 'Você não pode editar este usuário.');
+  const name = input.name?.trim(); const email = normalizeEmail(input.email ?? '');
+  if (!name) throw new AdminError('NAME', 'Informe o nome.');
+  if (!email) throw new AdminError('EMAIL', 'Informe um e-mail válido.');
+  const [dup] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, email));
+  if (dup && dup.id !== userId) throw new AdminError('DUP', 'Já existe um usuário com esse e-mail.');
+  const needsOrg = ['VENDEDOR', 'GESTOR'].includes(u.role);
+  let dist = u.distributorId; let unit = u.unitId;
+  if (needsOrg && actor.role === 'MARKETING') {
+    const r = await resolveUnit(u.role as Role, input.distributorId ?? null, input.unitId ?? null); dist = r.dist; unit = r.unit;
+  } else if (needsOrg && actor.role === 'GESTOR' && input.unitId && input.unitId !== u.unitId) {
+    const r = await resolveUnit(u.role as Role, u.distributorId, input.unitId); unit = r.unit;
+  }
+  const wasActive = u.status === 'ACTIVE';
+  if (wasActive && !input.active) {
+    if (u.id === actor.id) throw new AdminError('SELF', 'Você não pode desativar o próprio acesso.');
+    if (u.role === 'MARKETING') {
+      const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(schema.users).where(and(eq(schema.users.role, 'MARKETING'), eq(schema.users.status, 'ACTIVE')));
+      if (n <= 1) throw new AdminError('LAST', 'É preciso manter pelo menos um usuário de Marketing ativo.');
+    }
+  }
+  const status = input.active ? 'ACTIVE' : (u.status === 'ACTIVE' ? 'LEFT' : u.status);
+  await db.update(schema.users).set({
+    name, email, distributorId: dist, unitId: unit, status,
+    ...(input.active && u.status !== 'ACTIVE' ? { approvedAt: new Date(), approvedById: actor.id, notifyOptIn: !u.optOutAt && !!u.consentAt } : {}),
+    ...(!input.active && wasActive ? { notifyOptIn: false } : {}),
+  }).where(eq(schema.users.id, userId));
+}
+
+/** Exclui a pessoa e tudo que está ligado a ela (respostas, pontos, avisos). Não dá para desfazer. */
+export async function deleteUser(actor: Actor, userId: string) {
+  const [u] = await db.select().from(schema.users).where(eq(schema.users.id, userId));
+  if (!u) throw new AdminError('NOT_FOUND', 'Usuário não encontrado.');
+  if (!canManage(actor, u)) throw new AdminError('FORBIDDEN', 'Você não pode excluir este usuário.');
+  if (u.id === actor.id) throw new AdminError('SELF', 'Você não pode excluir o próprio acesso.');
+  if (u.role === 'MARKETING' && u.status === 'ACTIVE') {
+    const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(schema.users).where(and(eq(schema.users.role, 'MARKETING'), eq(schema.users.status, 'ACTIVE')));
+    if (n <= 1) throw new AdminError('LAST', 'É preciso manter pelo menos um usuário de Marketing ativo.');
+  }
+  await db.delete(schema.users).where(eq(schema.users.id, userId));
 }
 
 export async function deactivateUser(actor: Actor, userId: string) {
