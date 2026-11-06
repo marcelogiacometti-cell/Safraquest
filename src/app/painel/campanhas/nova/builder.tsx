@@ -9,11 +9,17 @@ const blankQ = (): PlanQuestion & { options: string[] } => ({ sendDate: '', send
 const fmtDay = (d: string) => (d ? d.split('-').reverse().join('/') : '—');
 const weekday = (d: string) => (d ? ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][new Date(d + 'T12:00:00Z').getUTCDay()] : '');
 
-export function Builder({ groups, initial, campaignId }: { groups: { id: string; name: string }[]; initial: CampaignPlanInput; campaignId: string | null }) {
+type Reg = { id: string; name: string }; type Dist = { id: string; name: string; type: 'COOPERATIVA' | 'REVENDA'; regionalId: string; sellers: number };
+const TYPES: ['COOPERATIVA' | 'REVENDA', string][] = [['COOPERATIVA', 'Cooperativas'], ['REVENDA', 'Revendas']];
+
+export function Builder({ regionals, dists, initial, campaignId }: { regionals: Reg[]; dists: Dist[]; initial: CampaignPlanInput; campaignId: string | null }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [f, setF] = useState({ name: initial.name, productName: initial.productName, objective: initial.objective ?? '', materialUrl: initial.materialUrl ?? '', speedBonus: !!initial.speedBonus });
-  const [groupIds, setGroupIds] = useState<string[]>(initial.groupIds);
+  const [regs, setRegs] = useState<string[]>(initial.audience.regionalIds);
+  const [types, setTypes] = useState<('COOPERATIVA' | 'REVENDA')[]>(initial.audience.types);
+  const [picked, setPicked] = useState<string[]>(initial.audience.distributorIds);
+  const [find, setFind] = useState('');
   const [qs, setQs] = useState<PlanQuestion[]>(initial.questions);
   const [editing, setEditing] = useState<{ idx: number | null; q: PlanQuestion } | null>(null);
   const [qErr, setQErr] = useState('');
@@ -34,7 +40,17 @@ export function Builder({ groups, initial, campaignId }: { groups: { id: string;
     setQs(editing.idx === null ? [...qs, clean] : qs.map((x, i) => (i === editing.idx ? clean : x)));
     setEditing(null); setQErr('');
   }
-  const plan = (): CampaignPlanInput => ({ ...f, groupIds, questions: qs });
+  const inRegs = (d: Dist) => !regs.length || regs.includes(d.regionalId);
+  const inTypes = (d: Dist) => !types.length || types.includes(d.type);
+  const matching = dists.filter((d) => inRegs(d) && inTypes(d));
+  const visible = matching.filter((d) => !find.trim() || d.name.toLowerCase().includes(find.trim().toLowerCase()));
+  const chosen = dists.filter((d) => picked.includes(d.id));
+  const reach = chosen.reduce((n, d) => n + d.sellers, 0);
+  // mudar região ou segmento remarca todos os canais que combinam com o filtro
+  const reselect = (r: string[], t: ('COOPERATIVA' | 'REVENDA')[]) => setPicked(dists.filter((d) => (!r.length || r.includes(d.regionalId)) && (!t.length || t.includes(d.type))).map((d) => d.id));
+  const toggleReg = (id: string) => { const r = regs.includes(id) ? regs.filter((x) => x !== id) : [...regs, id]; setRegs(r); reselect(r, types); };
+  const toggleType = (t: 'COOPERATIVA' | 'REVENDA') => { const n = types.includes(t) ? types.filter((x) => x !== t) : [...types, t]; setTypes(n); reselect(regs, n); };
+  const plan = (): CampaignPlanInput => ({ ...f, audience: { regionalIds: regs, types, distributorIds: picked }, questions: qs });
   function save(finalize: boolean) {
     setErr('');
     start(async () => {
@@ -47,11 +63,10 @@ export function Builder({ groups, initial, campaignId }: { groups: { id: string;
     setErr('');
     if (!f.name.trim() || !f.productName.trim()) return setErr('Preencha o nome e o tema da campanha.');
     if (!qs.length) return setErr('Adicione pelo menos uma pergunta.');
-    if (!groupIds.length) return setErr('Escolha quem recebe a campanha.');
+    if (!picked.length) return setErr('Escolha pelo menos um canal para receber a campanha.');
     setSummary(true);
   }
   const set = (k: keyof typeof f, v: string | boolean) => setF({ ...f, [k]: v });
-  const gName = (id: string) => groups.find((g) => g.id === id)?.name ?? id;
 
   return (<>
     <div className="card"><h2>Dados da campanha</h2>
@@ -62,9 +77,27 @@ export function Builder({ groups, initial, campaignId }: { groups: { id: string;
       <label style={{ fontWeight: 400 }}><input type="checkbox" checked={f.speedBonus} onChange={(e) => set('speedBonus', e.target.checked)} style={{ width: 'auto' }} /> Bônus de velocidade</label></div>
 
     <div className="card"><h2>Quem recebe</h2>
-      {!groups.length && <p className="mu">Nenhum grupo de canais. Crie em Estrutura › Grupos de canais.</p>}
-      {groups.map((g) => <label key={g.id} style={{ display: 'block', fontWeight: 400 }}><input type="checkbox" checked={groupIds.includes(g.id)} style={{ width: 'auto' }}
-        onChange={(e) => setGroupIds(e.target.checked ? [...groupIds, g.id] : groupIds.filter((x) => x !== g.id))} /> {g.name}</label>)}</div>
+      <p className="mu">Os filtros são ligados: a região e o segmento limitam a lista de canais, e os canais marcados são o público da campanha.</p>
+      <div style={{ fontWeight: 600, fontSize: 14, margin: '8px 0 4px' }}>1. Região de disparo <span className="mu" style={{ fontWeight: 400 }}>(nenhuma marcada = todas)</span></div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {regionals.map((r) => { const n = dists.filter((d) => d.regionalId === r.id && inTypes(d)).length; const on = regs.includes(r.id); return (
+          <button key={r.id} type="button" onClick={() => toggleReg(r.id)} className={'btn sm' + (on ? '' : ' sec')} disabled={!n && !on}>{r.name} · {n}</button>); })}</div>
+      <div style={{ fontWeight: 600, fontSize: 14, margin: '14px 0 4px' }}>2. Segmentação de canais <span className="mu" style={{ fontWeight: 400 }}>(nenhuma marcada = todas)</span></div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {TYPES.map(([t, label]) => { const n = dists.filter((d) => d.type === t && inRegs(d)).length; const on = types.includes(t); return (
+          <button key={t} type="button" onClick={() => toggleType(t)} className={'btn sm' + (on ? '' : ' sec')} disabled={!n && !on}>{label} · {n}</button>); })}</div>
+      <div className="row" style={{ margin: '14px 0 4px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ fontWeight: 600, fontSize: 14 }}>3. Clientes (canais) <span className="mu" style={{ fontWeight: 400 }}>— {matching.length} na seleção</span></div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Buscar pelo nome" style={{ margin: 0, width: 200 }} />
+          <button type="button" className="btn sm sec" onClick={() => setPicked([...new Set([...picked, ...visible.map((d) => d.id)])])}>Marcar todos</button>
+          <button type="button" className="btn sm sec" onClick={() => setPicked(picked.filter((id) => !visible.some((d) => d.id === id)))}>Limpar</button></div></div>
+      <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid var(--bd)', borderRadius: 10, padding: '4px 12px' }}>
+        {!visible.length && <p className="mu">Nenhum canal nesta seleção.</p>}
+        {visible.map((d) => <label key={d.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 400, padding: '5px 0' }}>
+          <input type="checkbox" checked={picked.includes(d.id)} style={{ width: 'auto', margin: 0 }} onChange={(e) => setPicked(e.target.checked ? [...picked, d.id] : picked.filter((x) => x !== d.id))} />
+          <span style={{ flex: 1 }}>{d.name}</span><span className="mu">{regionals.find((r) => r.id === d.regionalId)?.name} · {d.type === 'COOPERATIVA' ? 'Cooperativa' : 'Revenda'} · {d.sellers} vendedor(es)</span></label>)}</div>
+      <p style={{ margin: '10px 0 0' }}><b>{chosen.length}</b> canal(is) selecionado(s) · <b>{reach}</b> vendedor(es) ativo(s) hoje</p></div>
 
     <div className="card"><div className="row"><h2>Perguntas ({qs.length})</h2>
       <button type="button" className="btn sm" onClick={() => { setQErr(''); setEditing({ idx: null, q: blankQ() }); }}>＋ Adicionar nova pergunta</button></div>
@@ -99,7 +132,7 @@ export function Builder({ groups, initial, campaignId }: { groups: { id: string;
     {summary && <div className="ovl"><div className="box" style={{ maxWidth: 640 }}>
       <h2 style={{ marginTop: 0 }}>Resumo da campanha</h2>
       <p><b>{f.name}</b><br /><span className="mu">Tema: {f.productName}{f.objective ? ` · ${f.objective}` : ''}</span></p>
-      <p className="mu">Recebem: {groupIds.map(gName).join(', ')}</p>
+      <p className="mu">Recebem: {chosen.length} canal(is), {reach} vendedor(es) ativo(s){regs.length ? ` · região: ${regs.map((id) => regionals.find((r) => r.id === id)?.name).join(', ')}` : ' · todas as regiões'}{types.length ? ` · ${types.map((t) => (t === 'COOPERATIVA' ? 'cooperativas' : 'revendas')).join(' e ')}` : ' · cooperativas e revendas'}</p>
       <p className="mu">Bônus de velocidade: {f.speedBonus ? 'sim' : 'não'}</p>
       <h2>{qs.length} pergunta(s) em {quizzes.length} quiz(zes)</h2>
       <table><tbody>{quizzes.map((z, i) => <tr key={i}><td>Quiz {i + 1}</td><td>{weekday(z.when.sendDate)} {fmtDay(z.when.sendDate)} às {z.when.sendTime}</td><td>{z.n} pergunta(s)</td></tr>)}</tbody></table>

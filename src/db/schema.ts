@@ -114,6 +114,7 @@ export const campaigns = pgTable('campaigns', {
   productName: text('product_name').notNull(),
   objective: text('objective'),
   materialUrl: text('material_url'),
+  audience: jsonb('audience').$type<{ regionalIds: string[]; types: string[] }>(),
   startDate: timestamp('start_date', { withTimezone: true }),
   endDate: timestamp('end_date', { withTimezone: true }),
   everyWeeks: integer('every_weeks').notNull().default(1),

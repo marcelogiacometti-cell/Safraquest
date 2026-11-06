@@ -445,24 +445,27 @@ describe('regionais', () => {
   });
   it('campanha por perguntas programadas: agrupa por data/hora, valida e agenda', async () => {
     const { saveCampaignPlan, planFromQuestions, loadCampaignPlan } = await import('@/lib/admin');
-    const gid = (await db.select().from(schema.channelGroups))[0].id;
+    const gid = w.beta.d.id;
     const fut = (n: number) => { const d = new Date(Date.now() + n * 86_400_000); while (d.getUTCDay() === 0) d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
     const q = (text: string, sendDate: string, sendTime = '10:00') => ({ sendDate, sendTime, text, options: ['A', 'B', 'C'], correct: 1 });
-    const input = { name: 'Plano X', productName: 'Produto X', groupIds: [gid], questions: [q('p1', fut(10)), q('p2', fut(10)), q('p3', fut(14), '15:00')] };
+    const input = { name: 'Plano X', productName: 'Produto X', audience: { regionalIds: [], types: [], distributorIds: [gid] }, questions: [q('p1', fut(10)), q('p2', fut(10)), q('p3', fut(14), '15:00')] };
     const plan = planFromQuestions(input.questions);
     expect(plan.length).toBe(2); expect(plan[0].questions.length).toBe(2);
     await expect(saveCampaignPlan(w.actor(w.marketing), null, { ...input, questions: [q('x', fut(10), '22:00')] }, true)).rejects.toThrow(/entre/);
-    await expect(saveCampaignPlan(w.actor(w.marketing), null, { ...input, groupIds: [] }, true)).rejects.toThrow(/quem recebe/i);
+    await expect(saveCampaignPlan(w.actor(w.marketing), null, { ...input, audience: { regionalIds: [], types: [], distributorIds: [] } }, true)).rejects.toThrow(/canal/i);
     await expect(saveCampaignPlan(w.actor(w.marketing), null, { ...input, questions: [q('x', '2020-01-06')] }, true)).rejects.toThrow(/futuro/);
     const id = await saveCampaignPlan(w.actor(w.marketing), null, input, true);
     const [c] = await db.select().from(schema.campaigns).where(eq(schema.campaigns.id, id));
     expect(c.status).toBe('SCHEDULED');
     expect((await db.select().from(schema.missions).where(eq(schema.missions.campaignId, id))).length).toBe(2);
     expect((await db.select().from(schema.questions).where(eq(schema.questions.campaignId, id))).length).toBe(3);
+    const { campaignReach } = await import('@/lib/admin');
+    expect((await campaignReach(id)).distributors).toBe(1);
     // rascunho: salvar, recarregar e editar
     const d = await saveCampaignPlan(w.actor(w.marketing), null, { ...input, name: 'Rascunho Y' }, false);
     const loaded = await loadCampaignPlan(d);
     expect(loaded!.plan.questions.length).toBe(3);
+    expect(loaded!.plan.audience.distributorIds).toEqual([gid]);
     await saveCampaignPlan(w.actor(w.marketing), d, { ...loaded!.plan, questions: loaded!.plan.questions.slice(0, 1) }, false);
     expect((await db.select().from(schema.questions).where(eq(schema.questions.campaignId, d))).length).toBe(1);
     await expect(saveCampaignPlan(w.actor(w.marketing), id, input, false)).rejects.toThrow(/rascunhos/);

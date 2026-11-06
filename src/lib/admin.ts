@@ -161,7 +161,8 @@ export async function campaignReach(campaignId: string) {
 // ---------------------------------------------------------------- criação de campanha por perguntas programadas
 
 export type PlanQuestion = { sendDate: string; sendTime: string; text: string; options: string[]; correct: number; explanation?: string | null; topic?: string; timeLimit?: number };
-export type CampaignPlanInput = { name: string; productName: string; objective?: string | null; materialUrl?: string | null; speedBonus?: boolean; groupIds: string[]; questions: PlanQuestion[] };
+export type CampaignAudience = { regionalIds: string[]; types: ('COOPERATIVA' | 'REVENDA')[]; distributorIds: string[] };
+export type CampaignPlanInput = { name: string; productName: string; objective?: string | null; materialUrl?: string | null; speedBonus?: boolean; audience: CampaignAudience; questions: PlanQuestion[] };
 
 const MS_DAY = 86_400_000;
 const parseDate = (d: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d ?? ''); return m ? { y: +m[1], mo: +m[2] - 1, d: +m[3] } : null; };
@@ -203,12 +204,12 @@ export async function saveCampaignPlan(actor: Actor, id: string | null, input: C
   for (const m of plan) if (m.questions.length > QUESTIONS_PER_MISSION) throw new AdminError('FULL', `No mesmo dia e horário cabem no máximo ${QUESTIONS_PER_MISSION} perguntas. Mude o horário de algumas.`);
   if (finalize) {
     if (!plan.length) throw new AdminError('NO_Q', 'Adicione pelo menos uma pergunta.');
-    if (!input.groupIds.length) throw new AdminError('NO_GROUP', 'Escolha quem recebe a campanha.');
+    if (!input.audience.distributorIds.length) throw new AdminError('NO_GROUP', 'Escolha pelo menos um canal para receber a campanha.');
     if (plan[0].opensAt.getTime() <= Date.now()) throw new AdminError('PAST', 'O primeiro envio precisa estar no futuro.');
   }
   const values = {
     name: input.name.trim(), productName: input.productName.trim(), objective: input.objective?.trim() || null, materialUrl: input.materialUrl?.trim() || null,
-    speedBonus: !!input.speedBonus, everyWeeks: 1, minMissions: Math.max(1, Math.min(4, plan.length || 1)),
+    speedBonus: !!input.speedBonus, audience: { regionalIds: input.audience.regionalIds, types: input.audience.types }, everyWeeks: 1, minMissions: Math.max(1, Math.min(4, plan.length || 1)),
     startDate: plan[0]?.opensAt ?? null, endDate: plan.length ? plan[plan.length - 1].closesAt : null,
   };
   let campaignId = id;
@@ -232,9 +233,22 @@ export async function saveCampaignPlan(actor: Actor, id: string | null, input: C
       });
     }
   }
-  await setCampaignGroups(campaignId!, input.groupIds);
+  await syncAudienceGroup(campaignId!, values.name, input.audience.distributorIds);
   if (finalize) await scheduleCampaign(campaignId!);
   return campaignId!;
+}
+
+/** O público da campanha é um grupo de canais próprio, com os canais marcados no editor. */
+async function syncAudienceGroup(campaignId: string, campaignName: string, distributorIds: string[]) {
+  const tag = `· ${campaignId.slice(0, 6)}`;
+  const old = (await db.select().from(schema.channelGroups)).filter((g) => g.name.startsWith('Público ·') && g.name.endsWith(tag));
+  await db.delete(schema.campaignGroups).where(eq(schema.campaignGroups.campaignId, campaignId));
+  for (const g of old) await db.delete(schema.channelGroups).where(eq(schema.channelGroups.id, g.id));
+  const valid = distributorIds.length ? (await db.select({ id: schema.distributors.id }).from(schema.distributors).where(and(inArray(schema.distributors.id, distributorIds), eq(schema.distributors.active, true)))).map((d) => d.id) : [];
+  if (!valid.length) return;
+  const [g] = await db.insert(schema.channelGroups).values({ name: `Público · ${campaignName} ${tag}`, autoInclude: false }).returning();
+  await db.insert(schema.channelGroupMembers).values(valid.map((distributorId) => ({ groupId: g.id, distributorId })));
+  await db.insert(schema.campaignGroups).values({ campaignId, groupId: g.id });
 }
 
 /** Carrega um rascunho no formato do editor. */
@@ -244,6 +258,7 @@ export async function loadCampaignPlan(id: string) {
   const ms = await db.select().from(schema.missions).where(eq(schema.missions.campaignId, id)).orderBy(asc(schema.missions.number));
   const qs = await db.select().from(schema.questions).where(eq(schema.questions.campaignId, id)).orderBy(asc(schema.questions.position));
   const groupIds = (await db.select().from(schema.campaignGroups).where(eq(schema.campaignGroups.campaignId, id))).map((g) => g.groupId);
+  const distributorIds = groupIds.length ? [...new Set((await db.select().from(schema.channelGroupMembers).where(inArray(schema.channelGroupMembers.groupId, groupIds))).map((m) => m.distributorId))] : [];
   const p2 = (n: number) => String(n).padStart(2, '0');
   const questions: PlanQuestion[] = ms.flatMap((m) => {
     const t = toLocalParts(m.opensAt);
@@ -252,7 +267,7 @@ export async function loadCampaignPlan(id: string) {
       explanation: q.explanation, topic: q.topic, timeLimit: q.timeLimit,
     }));
   });
-  return { campaign: c, plan: { name: c.name, productName: c.productName, objective: c.objective, materialUrl: c.materialUrl, speedBonus: c.speedBonus, groupIds, questions } as CampaignPlanInput };
+  return { campaign: c, plan: { name: c.name, productName: c.productName, objective: c.objective, materialUrl: c.materialUrl, speedBonus: c.speedBonus, audience: { regionalIds: c.audience?.regionalIds ?? [], types: (c.audience?.types ?? []) as ('COOPERATIVA' | 'REVENDA')[], distributorIds }, questions } as CampaignPlanInput };
 }
 
 // ---------------------------------------------------------------- grupos de canais

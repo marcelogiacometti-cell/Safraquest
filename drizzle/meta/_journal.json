@@ -8,6 +8,13 @@
       "when": 1792771435920,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793966605447,
+      "tag": "0001_fuzzy_silhouette",
+      "breakpoints": true
     }
   ]
 }
