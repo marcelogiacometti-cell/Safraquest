@@ -19,7 +19,7 @@ export default async function Campanhas({ searchParams }: { searchParams: Promis
   const mkt = user.role === 'MARKETING';
   return (<>
     <div className="row" style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
-      <div><h1 style={{ fontSize: 34, margin: '4px 0' }}>Campanhas</h1><p className="mu" style={{ margin: 0, fontSize: 16 }}>Perguntas semanais enviadas por e-mail</p></div>
+      <div><h1 style={{ margin: '4px 0' }}>Campanhas</h1><p className="mu" style={{ margin: 0, fontSize: 16 }}>Perguntas semanais enviadas por e-mail</p></div>
       {mkt && <Link href="/painel/campanhas/nova" className="btn">＋ Nova campanha</Link>}</div>
     <div className="cgrid">
       {cards.map(({ c, n, part, hit, showBars }) => { const [label, cls] = ST[c.status] ?? [c.status, '']; return (

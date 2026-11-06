@@ -48,3 +48,29 @@ nav.tabs a{text-decoration:none;font-weight:700;font-size:13px}
 .ovl .box{background:#fff;border-radius:18px;max-width:900px;width:100%;padding:24px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.35)}
 .ovl .x{position:absolute;right:14px;top:10px;font-size:26px;text-decoration:none;color:var(--mu);line-height:1;background:none;border:0;cursor:pointer}
 .ovl h2{margin-top:22px}
+/* painel com menu lateral */
+.shell{display:flex;min-height:100vh}
+.side{width:248px;flex:none;background:#0b2217;color:#fff;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;padding:20px 14px;gap:6px;overflow-y:auto}
+.brand{display:flex;gap:10px;align-items:center;padding:4px 8px 20px}
+.brand .logo{width:40px;height:40px;border-radius:50%;background:var(--am);display:grid;place-items:center;font-size:20px}
+.brand b{display:block;font-size:19px;line-height:1.1}.brand small{color:#a9c2b3;font-size:12px}
+.snav{display:flex;flex-direction:column;gap:6px;flex:1}
+.si{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;color:#e7efe9;text-decoration:none;font-weight:600;font-size:15px;border:1px solid transparent}
+.si:hover{background:#12311f}
+.si.act{border-color:#e9efe9;color:var(--am);background:#0d2a1c}
+.ssub{display:none;flex-direction:column;margin:2px 0 4px 22px;padding-left:12px;border-left:1px solid #28483a}
+.sg:hover .ssub,.sg.on .ssub{display:flex}
+.ssub a{color:#c5d6cb;text-decoration:none;font-size:14px;padding:7px 10px;border-radius:10px}
+.ssub a:hover{background:#12311f}.ssub a.cur{color:var(--am);font-weight:700}
+.me2{border:1px solid #28483a;border-radius:14px;padding:10px 12px;margin-top:8px;font-size:13px}
+.me2 .mu2{display:block;color:#a9c2b3;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.sairb{width:100%;margin-top:6px;background:var(--am);color:#12261C;border:0;border-radius:12px;padding:11px;font:inherit;font-weight:800;cursor:pointer}
+.main{flex:1;min-width:0;padding:32px 36px 48px}
+.main h1{font-size:36px;letter-spacing:-.01em}
+.cgrid{grid-template-columns:repeat(auto-fill,minmax(310px,1fr))}
+.ccard{border-radius:22px;padding:22px}.ccard h3{font-size:22px;font-weight:800}
+@media(max-width:860px){
+  .shell{display:block}.side{position:static;width:auto;height:auto;flex-direction:column;padding:12px}
+  .snav{flex-direction:row;flex-wrap:wrap}.ssub{display:none!important}.brand{padding-bottom:8px}
+  .me2{display:none}.main{padding:18px 16px 40px}.main h1{font-size:28px}
+}

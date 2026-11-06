@@ -1,18 +1,14 @@
-import Link from 'next/link';
 import { currentUser } from '@/lib/web';
 import { PANEL_ROLES } from '@/lib/access';
 import { sair } from '../actions';
+import { PainelNav } from './nav';
 export default async function PainelLayout({ children }: { children: React.ReactNode }) {
   const u = await currentUser();
   const inside = u && PANEL_ROLES.includes(u.role as never);
-  return (<>
-    {inside && <nav className="top"><div className="wide">
-      <b style={{ marginRight: 18 }}>🌱 SafraQuest</b>
-      <Link href="/painel">Resumo</Link><div className="dd"><Link href="/painel/campanhas">Campanhas ▾</Link><div className="ddm"><Link href="/painel/campanhas">Campanhas cadastradas</Link>{u.role === 'MARKETING' && <Link href="/painel/campanhas/nova">Nova campanha</Link>}</div></div><Link href="/painel/ranking">Ranking</Link>
-      {(u.role === 'MARKETING' || u.role === 'GESTOR') && <Link href="/painel/usuarios">Usuários</Link>}
-      {u.role === 'MARKETING' && <><Link href="/painel/correcoes">Correções</Link><Link href="/painel/estrutura">Estrutura</Link><Link href="/painel/integracao">E-mail</Link></>}
-      <form action={sair} style={{ marginLeft: 'auto' }}><button className="btn sm sec">Sair</button></form>
-    </div></nav>}
-    <div className="wide">{children}</div>
-  </>);
+  if (!inside) return <div className="wide">{children}</div>;
+  return (<div className="shell">
+    <aside className="side"><PainelNav role={u.role} name={u.name} />
+      <form action={sair}><button className="sairb">Sair</button></form></aside>
+    <main className="main">{children}</main>
+  </div>);
 }
