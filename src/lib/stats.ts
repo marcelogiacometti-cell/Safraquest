@@ -163,7 +163,7 @@ export async function missionsOfUser(userId: string) {
   if (!u) return [];
   const rows = await db.select({
     id: schema.missions.id, number: schema.missions.number, opensAt: schema.missions.opensAt, closesAt: schema.missions.closesAt,
-    campaignId: schema.missions.campaignId, status: schema.campaigns.status, campaignName: schema.campaigns.name, product: schema.campaigns.productName,
+    campaignId: schema.missions.campaignId, status: schema.campaigns.status, campaignName: schema.campaigns.name, product: schema.campaigns.productName, audience: schema.campaigns.audience,
   }).from(schema.missions).innerJoin(schema.campaigns, eq(schema.missions.campaignId, schema.campaigns.id))
     .where(inArray(schema.campaigns.status, ['ACTIVE', 'CLOSED', 'SCHEDULED']));
   if (!rows.length) return [];
@@ -176,7 +176,8 @@ export async function missionsOfUser(userId: string) {
     campDists.set(cg.campaignId, s);
   }
   const isRep = u.role === 'REPRESENTANTE';
-  return rows.filter((m) => isRep || (u.distributorId && campDists.get(m.campaignId)?.has(u.distributorId)))
+  // campanhas antigas (sem lista de representantes) valem para todos os representantes
+  return rows.filter((m) => isRep ? (!m.audience?.repIds || m.audience.repIds.includes(u.id)) : (u.distributorId && campDists.get(m.campaignId)?.has(u.distributorId)))
     .sort((a, b) => a.opensAt.getTime() - b.opensAt.getTime());
 }
 export { sql };

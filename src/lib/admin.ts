@@ -126,7 +126,7 @@ export async function campaignChecklist(campaignId: string): Promise<{ ok: boole
   const items: ChecklistItem[] = [];
   items.push({ ok: !!c.startDate && !!c.endDate, text: 'Datas de início e fim definidas' });
   const groups = await db.select().from(schema.campaignGroups).where(eq(schema.campaignGroups.campaignId, campaignId));
-  items.push({ ok: groups.length > 0, text: 'Pelo menos um grupo de canais selecionado' });
+  items.push({ ok: groups.length > 0 || !!c.audience?.repIds?.length, text: 'Pelo menos um canal ou representante selecionado' });
   const ms = await db.select().from(schema.missions).where(eq(schema.missions.campaignId, campaignId)).orderBy(asc(schema.missions.number));
   const qs = await db.select().from(schema.questions).where(eq(schema.questions.campaignId, campaignId));
   const empty = ms.filter((m) => !qs.some((q) => q.missionId === m.id));
@@ -161,7 +161,7 @@ export async function campaignReach(campaignId: string) {
 // ---------------------------------------------------------------- criação de campanha por perguntas programadas
 
 export type PlanQuestion = { sendDate: string; sendTime: string; text: string; options: string[]; correct: number; explanation?: string | null; topic?: string; timeLimit?: number };
-export type CampaignAudience = { regionalIds: string[]; types: ('COOPERATIVA' | 'REVENDA')[]; distributorIds: string[] };
+export type CampaignAudience = { regionalIds: string[]; types: ('COOPERATIVA' | 'REVENDA')[]; distributorIds: string[]; diretorias?: string[]; distritos?: string[]; territorios?: string[]; repIds?: string[] };
 export type CampaignPlanInput = { name: string; productName: string; objective?: string | null; materialUrl?: string | null; speedBonus?: boolean; audience: CampaignAudience; questions: PlanQuestion[] };
 
 const MS_DAY = 86_400_000;
@@ -204,12 +204,12 @@ export async function saveCampaignPlan(actor: Actor, id: string | null, input: C
   for (const m of plan) if (m.questions.length > QUESTIONS_PER_MISSION) throw new AdminError('FULL', `No mesmo dia e horário cabem no máximo ${QUESTIONS_PER_MISSION} perguntas. Mude o horário de algumas.`);
   if (finalize) {
     if (!plan.length) throw new AdminError('NO_Q', 'Adicione pelo menos uma pergunta.');
-    if (!input.audience.distributorIds.length) throw new AdminError('NO_GROUP', 'Escolha pelo menos um canal para receber a campanha.');
+    if (!input.audience.distributorIds.length && !input.audience.repIds?.length) throw new AdminError('NO_GROUP', 'Escolha pelo menos um canal ou um representante para receber a campanha.');
     if (plan[0].opensAt.getTime() <= Date.now()) throw new AdminError('PAST', 'O primeiro envio precisa estar no futuro.');
   }
   const values = {
     name: input.name.trim(), productName: input.productName.trim(), objective: input.objective?.trim() || null, materialUrl: input.materialUrl?.trim() || null,
-    speedBonus: !!input.speedBonus, audience: { regionalIds: input.audience.regionalIds, types: input.audience.types }, everyWeeks: 1, minMissions: Math.max(1, Math.min(4, plan.length || 1)),
+    speedBonus: !!input.speedBonus, audience: { regionalIds: input.audience.regionalIds, types: input.audience.types, diretorias: input.audience.diretorias ?? [], distritos: input.audience.distritos ?? [], territorios: input.audience.territorios ?? [], repIds: input.audience.repIds ?? [] }, everyWeeks: 1, minMissions: Math.max(1, Math.min(4, plan.length || 1)),
     startDate: plan[0]?.opensAt ?? null, endDate: plan.length ? plan[plan.length - 1].closesAt : null,
   };
   let campaignId = id;
@@ -267,7 +267,7 @@ export async function loadCampaignPlan(id: string) {
       explanation: q.explanation, topic: q.topic, timeLimit: q.timeLimit,
     }));
   });
-  return { campaign: c, plan: { name: c.name, productName: c.productName, objective: c.objective, materialUrl: c.materialUrl, speedBonus: c.speedBonus, audience: { regionalIds: c.audience?.regionalIds ?? [], types: (c.audience?.types ?? []) as ('COOPERATIVA' | 'REVENDA')[], distributorIds }, questions } as CampaignPlanInput };
+  return { campaign: c, plan: { name: c.name, productName: c.productName, objective: c.objective, materialUrl: c.materialUrl, speedBonus: c.speedBonus, audience: { regionalIds: c.audience?.regionalIds ?? [], types: (c.audience?.types ?? []) as ('COOPERATIVA' | 'REVENDA')[], distributorIds, diretorias: c.audience?.diretorias ?? [], distritos: c.audience?.distritos ?? [], territorios: c.audience?.territorios ?? [], repIds: c.audience?.repIds ?? [] }, questions } as CampaignPlanInput };
 }
 
 // ---------------------------------------------------------------- grupos de canais
@@ -450,7 +450,7 @@ export async function moveUserToUnit(actor: Actor, userId: string, unitId: strin
   await db.update(schema.users).set({ unitId, distributorId: un.distributorId }).where(eq(schema.users.id, userId));
 }
 
-export type ManualUserInput = { name: string; email: string; role: Role; distributorId?: string | null; unitId?: string | null; password?: string; consent?: boolean };
+export type ManualUserInput = { name: string; email: string; role: Role; distributorId?: string | null; unitId?: string | null; password?: string; consent?: boolean; diretoria?: string; distrito?: string; territorio?: string };
 
 async function resolveUnit(role: Role, distributorId: string | null, unitId: string | null) {
   let dist = distributorId; let unit = unitId;
@@ -478,13 +478,15 @@ export async function createUserManually(actor: Actor, input: ManualUserInput) {
   const { dist, unit } = await resolveUnit(role, actor.role === 'GESTOR' ? actor.distributorId : input.distributorId ?? null, input.unitId ?? null);
   if (actor.role === 'GESTOR' && dist !== actor.distributorId) throw new AdminError('FORBIDDEN', 'Você só cadastra no seu distribuidor.');
   const needsPw = role === 'GESTOR' || role === 'MARKETING';
+  const org = role === 'REPRESENTANTE' ? { diretoria: input.diretoria?.trim() || null, distrito: input.distrito?.trim() || null, territorio: input.territorio?.trim() || null } : {};
+  if (role === 'REPRESENTANTE' && !(org.diretoria && org.distrito && org.territorio)) throw new AdminError('ORG', 'Informe Diretoria, Distrito e Território do representante.');
   if (needsPw && (input.password ?? '').length < 8) throw new AdminError('PASSWORD', 'Defina uma senha inicial de pelo menos 8 caracteres.');
   const [dup] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, email));
   if (dup) throw new AdminError('DUP', 'Já existe um usuário com esse e-mail.');
   const now = new Date();
   const [u] = await db.insert(schema.users).values({
     name, email, role, status: 'ACTIVE', distributorId: dist, unitId: unit, passwordHash: needsPw ? await hashPassword(input.password!) : null,
-    invitedVia: 'manual', approvedAt: now, approvedById: actor.id, consentAt: input.consent ? now : null, notifyOptIn: !!input.consent,
+    invitedVia: 'manual', ...org, approvedAt: now, approvedById: actor.id, consentAt: input.consent ? now : null, notifyOptIn: !!input.consent,
   }).returning();
   if (input.consent) await db.insert(schema.consentLogs).values({ userId: u.id, kind: 'GRANT', source: `manual:${actor.id}` });
   let notified = false;
@@ -495,7 +497,7 @@ export async function createUserManually(actor: Actor, input: ManualUserInput) {
   return { id: u.id, notified };
 }
 
-export async function updateUser(actor: Actor, userId: string, input: { name: string; email: string; distributorId?: string | null; unitId?: string | null; active: boolean }) {
+export async function updateUser(actor: Actor, userId: string, input: { name: string; email: string; distributorId?: string | null; unitId?: string | null; active: boolean; diretoria?: string; distrito?: string; territorio?: string }) {
   const [u] = await db.select().from(schema.users).where(eq(schema.users.id, userId));
   if (!u) throw new AdminError('NOT_FOUND', 'Usuário não encontrado.');
   if (!canManage(actor, u)) throw new AdminError('FORBIDDEN', 'Você não pode editar este usuário.');
@@ -511,6 +513,12 @@ export async function updateUser(actor: Actor, userId: string, input: { name: st
   } else if (needsOrg && actor.role === 'GESTOR' && input.unitId && input.unitId !== u.unitId) {
     const r = await resolveUnit(u.role as Role, u.distributorId, input.unitId); unit = r.unit;
   }
+  let org = {};
+  if (u.role === 'REPRESENTANTE' && actor.role === 'MARKETING') {
+    const o = { diretoria: input.diretoria?.trim() || '', distrito: input.distrito?.trim() || '', territorio: input.territorio?.trim() || '' };
+    if (!o.diretoria || !o.distrito || !o.territorio) throw new AdminError('ORG', 'Informe Diretoria, Distrito e Território do representante.');
+    org = o;
+  }
   const wasActive = u.status === 'ACTIVE';
   if (wasActive && !input.active) {
     if (u.id === actor.id) throw new AdminError('SELF', 'Você não pode desativar o próprio acesso.');
@@ -521,7 +529,7 @@ export async function updateUser(actor: Actor, userId: string, input: { name: st
   }
   const status = input.active ? 'ACTIVE' : (u.status === 'ACTIVE' ? 'LEFT' : u.status);
   await db.update(schema.users).set({
-    name, email, distributorId: dist, unitId: unit, status,
+    name, email, distributorId: dist, unitId: unit, status, ...org,
     ...(input.active && u.status !== 'ACTIVE' ? { approvedAt: new Date(), approvedById: actor.id, notifyOptIn: !u.optOutAt && !!u.consentAt } : {}),
     ...(!input.active && wasActive ? { notifyOptIn: false } : {}),
   }).where(eq(schema.users.id, userId));

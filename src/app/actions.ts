@@ -42,9 +42,10 @@ export async function cadastrar(_: unknown, fd: FormData) {
     token: String(fd.get('token')), name: String(fd.get('nome') ?? ''),
     unitId: (fd.get('unidade') as string) || null, consent: fd.get('aceite') === 'on',
     email: String(fd.get('email') ?? ''), password: String(fd.get('senha') ?? ''),
+    diretoria: String(fd.get('diretoria') ?? ''), distrito: String(fd.get('distrito') ?? ''), territorio: String(fd.get('territorio') ?? ''),
   });
   if (!r.ok) {
-    const m: Record<string, string> = { NAME: 'Informe nome e sobrenome.', CONSENT: 'É preciso aceitar receber as mensagens para participar.', DUPLICATE: 'Esse número já está cadastrado.', UNIT: 'Escolha a sua unidade.', INVITE: 'Este link não está mais disponível.', EMAIL: 'E-mail inválido.', PASSWORD: 'A senha precisa ter pelo menos 8 caracteres.' };
+    const m: Record<string, string> = { NAME: 'Informe nome e sobrenome.', CONSENT: 'É preciso aceitar receber as mensagens para participar.', DUPLICATE: 'Esse número já está cadastrado.', UNIT: 'Escolha a sua unidade.', INVITE: 'Este link não está mais disponível.', EMAIL: 'E-mail inválido.', PASSWORD: 'A senha precisa ter pelo menos 8 caracteres.', ORG: 'Informe Diretoria, Distrito e Território.' };
     return { error: m[r.reason] };
   }
   redirect('/pendente');

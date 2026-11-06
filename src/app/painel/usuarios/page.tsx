@@ -6,7 +6,7 @@ import { visibleDistributorIds } from '@/lib/access';
 import { Form } from '@/app/forms';
 import { aprovar, recusar, definirCarteira, editarUsuario, excluirUsuario } from '../actions';
 import { Filtros, type F } from './filtros';
-import { DistUnit } from './campos';
+import { DistUnit, RepOrg } from './campos';
 export const dynamic = 'force-dynamic';
 const ROLE: Record<string, string> = { VENDEDOR: 'Vendedor', GESTOR: 'Gestor', REPRESENTANTE: 'Representante', REGIONAL: 'Regional', DIRETORIA: 'Diretoria', MARKETING: 'Marketing' };
 const STATUS: Record<string, [string, string]> = { ACTIVE: ['Ativo', ''], LEFT: ['Inativo', ' cz'], PENDING: ['Pendente', ' am'], REJECTED: ['Recusado', ' rd'] };
@@ -29,6 +29,7 @@ export default async function Usuarios({ searchParams }: { searchParams: Promise
     && (!f.regional || (u.distributorId && distOf.get(u.distributorId)?.regionalId === f.regional)) && (!q || u.name.toLowerCase().includes(q) || (u.email ?? '').toLowerCase().includes(q)))
     .sort((a, b) => ({ PENDING: 0, ACTIVE: 1, LEFT: 2, REJECTED: 3 } as Record<string, number>)[a.status] - ({ PENDING: 0, ACTIVE: 1, LEFT: 2, REJECTED: 3 } as Record<string, number>)[b.status] || a.name.localeCompare(b.name, 'pt-BR'));
   const roles = [...new Set(all.map((u) => u.role))];
+  const tree = all.filter((u) => u.role === 'REPRESENTANTE' && u.diretoria && u.distrito && u.territorio).map((u) => ({ diretoria: u.diretoria!, distrito: u.distrito!, territorio: u.territorio! }));
   const canManage = (u: (typeof all)[number]) => me.role === 'MARKETING' || (u.role === 'VENDEDOR' && u.distributorId === actor.distributorId);
   const editing = sp.edit ? all.find((u) => u.id === sp.edit && canManage(u)) : null;
   const deleting = sp.del ? all.find((u) => u.id === sp.del && canManage(u) && u.id !== me.id) : null;
@@ -40,11 +41,11 @@ export default async function Usuarios({ searchParams }: { searchParams: Promise
     <h1>Usuários cadastrados</h1>
     <p className="mu" style={{ margin: '0 0 8px' }}>{rows.length} de {all.length} usuário(s)</p>
     <Filtros f={f} regionals={regionals} dists={dists} units={units} roles={roles} />
-    <div className="card" style={{ overflowX: 'auto' }}><table><thead><tr><th>Usuário</th><th>Categoria</th><th>Canal vinculado</th><th>Status</th><th>Ações</th></tr></thead><tbody>
+    <div className="card" style={{ overflowX: 'auto' }}><table><thead><tr><th>Usuário</th><th>Categoria</th><th>Canal / território</th><th>Status</th><th>Ações</th></tr></thead><tbody>
       {rows.map((u) => { const d = u.distributorId ? distOf.get(u.distributorId) : null; const un = u.unitId ? unitOf.get(u.unitId) : null; const [sl, sc] = STATUS[u.status] ?? [u.status, ''];
         return (<tr key={u.id}><td><b>{u.name}</b><br /><span className="mu">{u.email} · desde {fmtDate(u.createdAt)}</span></td>
           <td>{ROLE[u.role] ?? u.role}</td>
-          <td>{d ? <>{d.name}{un ? ` · ${un.name}` : ''}<br /><span className="mu">{regOf.get(d.regionalId) ?? ''} · {d.type === 'COOPERATIVA' ? 'Cooperativa' : 'Revenda'}</span></> : '—'}</td>
+          <td>{u.role === 'REPRESENTANTE' ? (u.diretoria ? <>{u.territorio}<br /><span className="mu">{u.diretoria} › {u.distrito}</span></> : '—') : d ? <>{d.name}{un ? ` · ${un.name}` : ''}<br /><span className="mu">{regOf.get(d.regionalId) ?? ''} · {d.type === 'COOPERATIVA' ? 'Cooperativa' : 'Revenda'}</span></> : '—'}</td>
           <td><span className={'pill' + sc} style={u.status === 'ACTIVE' ? { background: '#d7f0e0', color: '#1b6b43' } : undefined}>{sl}</span></td>
           <td style={{ whiteSpace: 'nowrap' }}>
             {u.status === 'PENDING' && <><form action={aprovar} style={{ display: 'inline' }}><input type="hidden" name="id" value={u.id} /><button className="btn sm">Aprovar</button></form>{' '}
@@ -60,6 +61,7 @@ export default async function Usuarios({ searchParams }: { searchParams: Promise
         {(editing.role === 'VENDEDOR' || editing.role === 'GESTOR') && (me.role === 'MARKETING'
           ? <DistUnit dists={dists} units={units} dist={editing.distributorId ?? ''} unit={editing.unitId ?? ''} requireUnit={editing.role === 'VENDEDOR'} />
           : <label>Filial<select name="filial" defaultValue={editing.unitId ?? ''}>{units.filter((x) => x.distributorId === editing.distributorId).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>)}
+        {editing.role === 'REPRESENTANTE' && me.role === 'MARKETING' && <RepOrg tree={tree} v={{ diretoria: editing.diretoria ?? '', distrito: editing.distrito ?? '', territorio: editing.territorio ?? '' }} />}
         <label>Status da conta<select name="status" defaultValue={editing.status === 'ACTIVE' ? 'ACTIVE' : 'LEFT'}><option value="ACTIVE">Ativo</option><option value="LEFT">Inativo</option></select></label></Form>
       {editing.role === 'REPRESENTANTE' && me.role === 'MARKETING' && <form action={definirCarteira} style={{ marginTop: 18 }}><input type="hidden" name="id" value={editing.id} />
         <h2>Carteira de canais</h2>{allDists.map((d) => <label key={d.id} style={{ display: 'block', fontWeight: 400 }}><input type="checkbox" name="dists" value={d.id} defaultChecked={assigns.some((a) => a.distributorId === d.id)} style={{ width: 'auto' }} /> {d.name}</label>)}

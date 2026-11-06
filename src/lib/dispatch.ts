@@ -13,7 +13,8 @@ export type DispatchReport = {
 
 type Mom = typeof schema.messageMoments.$inferSelect;
 
-async function recipientsOfCampaign(campaignId: string) {
+export async function recipientsOfCampaign(campaignId: string) {
+  const [camp] = await db.select({ audience: schema.campaigns.audience }).from(schema.campaigns).where(eq(schema.campaigns.id, campaignId));
   const groupIds = (await db.select().from(schema.campaignGroups).where(eq(schema.campaignGroups.campaignId, campaignId))).map((g) => g.groupId);
   const dists = groupIds.length
     ? (await db.select().from(schema.channelGroupMembers).where(inArray(schema.channelGroupMembers.groupId, groupIds))).map((m) => m.distributorId)
@@ -21,7 +22,10 @@ async function recipientsOfCampaign(campaignId: string) {
   const sellers = dists.length
     ? await db.select().from(schema.users).where(and(inArray(schema.users.distributorId, [...new Set(dists)]), eq(schema.users.role, 'VENDEDOR'), eq(schema.users.status, 'ACTIVE')))
     : [];
-  const reps = await db.select().from(schema.users).where(and(eq(schema.users.role, 'REPRESENTANTE'), eq(schema.users.status, 'ACTIVE')));
+  const allReps = await db.select().from(schema.users).where(and(eq(schema.users.role, 'REPRESENTANTE'), eq(schema.users.status, 'ACTIVE')));
+  // campanhas antigas (sem lista de representantes) seguem indo para todos; as novas, só para os escolhidos
+  const repIds = camp?.audience?.repIds;
+  const reps = repIds ? allReps.filter((r) => repIds.includes(r.id)) : allReps;
   return [...sellers, ...reps];
 }
 

@@ -3,13 +3,14 @@ import type { CampaignPlanInput, PlanQuestion } from './admin';
 
 export type XlReg = { id: string; name: string };
 export type XlDist = { id: string; name: string; type: 'COOPERATIVA' | 'REVENDA'; regionalId: string };
+export type XlRep = { id: string; name: string; diretoria: string; distrito: string; territorio: string };
 export type XlResult = { plan?: CampaignPlanInput; errors: string[]; warnings: string[] };
 
 const LET = ['A', 'B', 'C', 'D'];
 const norm = (s: unknown) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
 const pad = (n: number) => String(n).padStart(2, '0');
 
-export async function buildTemplate(regs: XlReg[], dists: XlDist[]): Promise<Buffer> {
+export async function buildTemplate(regs: XlReg[], dists: XlDist[], reps: XlRep[] = []): Promise<Buffer> {
   const wb = new ExcelJS.Workbook(); wb.creator = 'SafraQuest';
   const head = (ws: ExcelJS.Worksheet) => { const r = ws.getRow(1); r.font = { bold: true, color: { argb: 'FFFFFFFF' } }; r.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E7B4F' } }; };
 
@@ -29,9 +30,12 @@ export async function buildTemplate(regs: XlReg[], dists: XlDist[]): Promise<Buf
   const c = wb.addWorksheet('Campanha'); c.columns = [{ width: 30 }, { width: 70 }, { width: 60 }];
   c.addRow(['Campo', 'Valor', 'Dica']); head(c);
   [['Nome da campanha', '', 'Ex.: Semana 43 · Lançamento Nutri+'], ['Tema / produto', '', 'Obrigatório'], ['Objetivo', '', 'Opcional'], ['Link do material', '', 'Opcional (https://...)'],
-    ['Bônus de velocidade', 'Não', 'Sim ou Não'], ['Regiões', '', 'Separe por ; · em branco = todas'], ['Segmentos', '', 'Cooperativas; Revendas · em branco = todos'], ['Canais', '', 'Separe por ; · em branco = todos da região/segmento']].forEach((r) => c.addRow(r));
+    ['Bônus de velocidade', 'Não', 'Sim ou Não'], ['Regiões', '', 'Separe por ; · em branco = todas'], ['Segmentos', '', 'Cooperativas; Revendas · em branco = todos'], ['Canais', '', 'Separe por ; · em branco = todos da região/segmento'],
+    ['Enviar para canais', 'Sim', 'Sim ou Não (Não = só representantes Corteva)'], ['Enviar para representantes Corteva', 'Não', 'Sim ou Não'],
+    ['Diretorias', '', 'Só se enviar a representantes · separe por ; · em branco = todas'], ['Distritos', '', 'Separe por ; · em branco = todos'], ['Territórios', '', 'Separe por ; · em branco = todos'],
+    ['Representantes', '', 'Nomes separados por ; · em branco = todos dentro dos filtros acima']].forEach((r) => c.addRow(r));
   c.getColumn(1).font = { bold: true };
-  c.getCell('B6').dataValidation = { type: 'list', allowBlank: true, formulae: ['"Sim,Não"'] };
+  for (const a of ['B6', 'B10', 'B11']) c.getCell(a).dataValidation = { type: 'list', allowBlank: true, formulae: ['"Sim,Não"'] };
 
   const jn = wb.addWorksheet('Jornadas'); jn.columns = [{ width: 12 }, { width: 22 }, { width: 12 }];
   jn.addRow(['Jornada', 'Data de disparo', 'Horário']); head(jn);
@@ -49,6 +53,9 @@ export async function buildTemplate(regs: XlReg[], dists: XlDist[]): Promise<Buf
   k.addRow(['Canal', 'Segmento', 'Região']); head(k);
   const rn = new Map(regs.map((r) => [r.id, r.name]));
   [...dists].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).forEach((d) => k.addRow([d.name, d.type === 'COOPERATIVA' ? 'Cooperativas' : 'Revendas', rn.get(d.regionalId) ?? '']));
+  const rp = wb.addWorksheet('Representantes'); rp.columns = [{ width: 32 }, { width: 24 }, { width: 24 }, { width: 24 }];
+  rp.addRow(['Representante', 'Diretoria', 'Distrito', 'Território']); head(rp);
+  [...reps].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).forEach((r) => rp.addRow([r.name, r.diretoria, r.distrito, r.territorio]));
   k.getCell('E1').value = 'Regiões'; k.getCell('E1').font = { bold: true };
   regs.forEach((r, i) => { k.getCell(i + 2, 5).value = r.name; }); k.getColumn(5).width = 28;
   return Buffer.from(await wb.xlsx.writeBuffer());
@@ -83,7 +90,7 @@ function parseTime(v: ExcelJS.CellValue): string | null {
 }
 const list = (s: string) => s.split(/[;\n]/).map((x) => x.trim()).filter(Boolean);
 
-export async function parseCampaignWorkbook(buf: Buffer | ArrayBuffer, regs: XlReg[], dists: XlDist[]): Promise<XlResult> {
+export async function parseCampaignWorkbook(buf: Buffer | ArrayBuffer, regs: XlReg[], dists: XlDist[], reps: XlRep[] = []): Promise<XlResult> {
   const errors: string[] = []; const warnings: string[] = [];
   const wb = new ExcelJS.Workbook();
   try { await wb.xlsx.load(buf as ArrayBuffer); } catch { return { errors: ['Não consegui abrir o arquivo. Use o modelo .xlsx baixado no painel.'], warnings }; }
@@ -106,12 +113,25 @@ export async function parseCampaignWorkbook(buf: Buffer | ArrayBuffer, regs: XlR
     else errors.push(`Aba Campanha: segmento "${n}" inválido (use Cooperativas ou Revendas).`);
   }
   const chosen: string[] = [];
-  const named = list(kv.get('canais') ?? '');
-  if (named.length) {
+  const yes = (k: string, dflt: boolean) => { const v = norm(kv.get(k)); return v ? ['sim', 's', 'true', '1'].includes(v) : dflt; };
+  const sendChannels = yes('enviar para canais', true); const sendReps = yes('enviar para representantes corteva', false);
+  const named = sendChannels ? list(kv.get('canais') ?? '') : [];
+  if (!sendChannels) { /* só representantes */ } else if (named.length) {
     for (const n of named) { const d = dists.find((x) => norm(x.name) === norm(n)); d ? chosen.push(d.id) : errors.push(`Aba Campanha: canal "${n}" não encontrado (veja a aba Canais).`); }
     for (const id of chosen) { const d = dists.find((x) => x.id === id)!; if ((regIds.length && !regIds.includes(d.regionalId)) || (types.length && !types.includes(d.type))) warnings.push(`O canal "${d.name}" está fora da região/segmento informados, mas foi mantido.`); }
   } else for (const d of dists) if ((!regIds.length || regIds.includes(d.regionalId)) && (!types.length || types.includes(d.type))) chosen.push(d.id);
-  if (!chosen.length && !errors.length) errors.push('Nenhum canal corresponde à região/segmento informados.');
+  const repIds: string[] = []; const dirs = list(kv.get('diretorias') ?? ''); const diss = list(kv.get('distritos') ?? ''); const ters = list(kv.get('territorios') ?? '');
+  if (sendReps) {
+    const has = (a: string[], v: string) => !a.length || a.some((x) => norm(x) === norm(v));
+    for (const [lbl, arr, key] of [['Diretoria', dirs, 'diretoria'], ['Distrito', diss, 'distrito'], ['Território', ters, 'territorio']] as const)
+      for (const n of arr) if (!reps.some((r) => norm(r[key]) === norm(n))) errors.push(`Aba Campanha: ${lbl} "${n}" não existe entre os representantes (veja a aba Representantes).`);
+    const rnames = list(kv.get('representantes') ?? '');
+    if (rnames.length) for (const n of rnames) { const r = reps.find((x) => norm(x.name) === norm(n)); r ? repIds.push(r.id) : errors.push(`Aba Campanha: representante "${n}" não encontrado (veja a aba Representantes).`); }
+    else for (const r of reps) if (has(dirs, r.diretoria) && has(diss, r.distrito) && has(ters, r.territorio)) repIds.push(r.id);
+    if (!repIds.length && !errors.length) errors.push('Nenhum representante corresponde à Diretoria/Distrito/Território informados.');
+  }
+  if (!sendChannels && !sendReps) errors.push('Aba Campanha: escolha enviar para canais e/ou para representantes.');
+  if (sendChannels && !chosen.length && !errors.length) errors.push('Nenhum canal corresponde à região/segmento informados.');
   const bonus = norm(kv.get('bonus de velocidade')); 
 
   const jw = wb.getWorksheet('Jornadas');
@@ -165,5 +185,5 @@ export async function parseCampaignWorkbook(buf: Buffer | ArrayBuffer, regs: XlR
   for (const num of journeys.keys()) if (!perJ.has(num) && !errors.some((e) => e.startsWith('Perguntas'))) errors.push(`A jornada ${num} não tem perguntas na aba Perguntas.`);
   if (!questions.length && !errors.some((e) => e.startsWith('Perguntas') || e.startsWith('Jornadas') || e.startsWith('A jornada'))) errors.push('Aba Perguntas: nenhuma pergunta preenchida (linhas "(EXEMPLO)" são ignoradas).');
   if (errors.length) return { errors, warnings };
-  return { errors, warnings, plan: { name, productName: product, objective: kv.get('objetivo') || '', materialUrl: link, speedBonus: ['sim', 's', 'true', '1'].includes(bonus), audience: { regionalIds: regIds, types, distributorIds: chosen }, questions } };
+  return { errors, warnings, plan: { name, productName: product, objective: kv.get('objetivo') || '', materialUrl: link, speedBonus: ['sim', 's', 'true', '1'].includes(bonus), audience: { regionalIds: regIds, types, distributorIds: chosen, diretorias: sendReps ? dirs : [], distritos: sendReps ? diss : [], territorios: sendReps ? ters : [], repIds }, questions } };
 }

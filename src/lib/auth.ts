@@ -94,10 +94,10 @@ export async function checkInvite(token: string): Promise<InviteCheck> {
   return { ok: true, invite: inv };
 }
 
-export type RegisterInput = { token: string; name: string; email: string; unitId?: string | null; consent: boolean; password?: string };
+export type RegisterInput = { token: string; name: string; email: string; unitId?: string | null; consent: boolean; password?: string; diretoria?: string; distrito?: string; territorio?: string };
 export type RegisterResult =
   | { ok: true; userId: string }
-  | { ok: false; reason: 'INVITE' | 'NAME' | 'CONSENT' | 'DUPLICATE' | 'UNIT' | 'EMAIL' | 'PASSWORD'; invite?: 'NOT_FOUND' | 'EXPIRED' | 'FULL' };
+  | { ok: false; reason: 'INVITE' | 'NAME' | 'CONSENT' | 'DUPLICATE' | 'UNIT' | 'EMAIL' | 'PASSWORD' | 'ORG'; invite?: 'NOT_FOUND' | 'EXPIRED' | 'FULL' };
 
 export async function registerViaInvite(input: RegisterInput): Promise<RegisterResult> {
   const chk = await checkInvite(input.token);
@@ -119,6 +119,8 @@ export async function registerViaInvite(input: RegisterInput): Promise<RegisterR
     if (!un) return { ok: false, reason: 'UNIT' };
   }
   if (inv.targetRole === 'VENDEDOR' && !unitId) return { ok: false, reason: 'UNIT' };
+  const org = { diretoria: input.diretoria?.trim() || null, distrito: input.distrito?.trim() || null, territorio: input.territorio?.trim() || null };
+  if (inv.targetRole === 'REPRESENTANTE' && (!org.diretoria || !org.distrito || !org.territorio)) return { ok: false, reason: 'ORG' };
   const [dup] = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, email));
   if (dup) return { ok: false, reason: 'DUPLICATE' };
   const now = new Date();
@@ -130,7 +132,7 @@ export async function registerViaInvite(input: RegisterInput): Promise<RegisterR
     if (!upd.length) return null;
     const [u] = await tx.insert(schema.users).values({
       name: input.name.trim(), email, passwordHash, role: inv.targetRole, status: 'PENDING',
-      distributorId: inv.distributorId, unitId, invitedVia: inv.id,
+      distributorId: inv.distributorId, unitId, invitedVia: inv.id, ...(inv.targetRole === 'REPRESENTANTE' ? org : {}),
       consentAt: input.consent ? now : null, notifyOptIn: input.consent,
     }).returning({ id: schema.users.id });
     if (input.consent) await tx.insert(schema.consentLogs).values({ userId: u.id, kind: 'GRANT', source: 'cadastro:' + inv.id });

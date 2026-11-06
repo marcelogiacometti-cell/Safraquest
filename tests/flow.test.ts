@@ -328,7 +328,9 @@ describe('links para gestor e representante', () => {
   it('representante: link sem distribuidor, aprovação e carteira', async () => {
     const m = w.actor(w.marketing);
     const r = await createInvite(m, { role: 'REPRESENTANTE', days: 7 });
-    const ok = await registerViaInvite({ token: r.token, name: 'Rita Representante', email: 'rita@t.com', consent: true });
+    const sem = await registerViaInvite({ token: r.token, name: 'Rita Representante', email: 'rita@t.com', consent: true });
+    expect(sem).toMatchObject({ ok: false, reason: 'ORG' });
+    const ok = await registerViaInvite({ token: r.token, name: 'Rita Representante', email: 'rita@t.com', consent: true, diretoria: 'Sul', distrito: 'RS', territorio: 'Passo Fundo' });
     expect(ok.ok).toBe(true);
     const uid = (ok as { userId: string }).userId;
     await approveUser(m, uid);
@@ -536,5 +538,46 @@ describe('importação Excel', () => {
     jn.addRow([3, '15/11/2026', '09:00']); jn.addRow([4, '16/11/2026', '25:00']); p.addRow([3, 'Q3?', 'a', 'b', '', '', 'C']); p.addRow([9, 'Q9?', 'a', 'b', '', '', 'A']);
     const e = await parseCampaignWorkbook(Buffer.from(await wb.xlsx.writeBuffer()), regs, dists);
     expect(e.errors.join('|')).toMatch(/domingo/); expect(e.errors.join('|')).toMatch(/\(C\) está em branco/); expect(e.errors.join('|')).toMatch(/horário inválido/); expect(e.errors.join('|')).toMatch(/jornada 9 não está cadastrada/);
+  });
+});
+
+describe('representantes Corteva: Diretoria › Distrito › Território', () => {
+  it('exige os 3 níveis, grava, e só os escolhidos recebem a campanha', async () => {
+    const { createUserManually, updateUser, saveCampaignPlan, loadCampaignPlan } = await import('@/lib/admin');
+    const { recipientsOfCampaign } = await import('@/lib/dispatch');
+    const mkt = w.actor(w.marketing);
+    await expect(createUserManually(mkt, { name: 'Rep Sem Org', email: 'rep0@teste.com', role: 'REPRESENTANTE', consent: true })).rejects.toThrow(/Diretoria/);
+    const a = await createUserManually(mkt, { name: 'Rep A', email: 'repa@teste.com', role: 'REPRESENTANTE', consent: true, diretoria: 'Diretoria Sul', distrito: 'Distrito RS', territorio: 'Passo Fundo' });
+    const b = await createUserManually(mkt, { name: 'Rep B', email: 'repb@teste.com', role: 'REPRESENTANTE', consent: true, diretoria: 'Diretoria Centro-Oeste', distrito: 'Distrito MS', territorio: 'Dourados' });
+    const [ua] = await db.select().from(schema.users).where(eq(schema.users.id, a.id));
+    expect([ua.diretoria, ua.distrito, ua.territorio]).toEqual(['Diretoria Sul', 'Distrito RS', 'Passo Fundo']);
+    await expect(updateUser(mkt, b.id, { name: 'Rep B', email: 'repb@teste.com', active: true, diretoria: 'X', distrito: '', territorio: 'Y' })).rejects.toThrow(/Diretoria/);
+    await updateUser(mkt, b.id, { name: 'Rep B', email: 'repb@teste.com', active: true, diretoria: 'Diretoria Centro-Oeste', distrito: 'Distrito MS', territorio: 'Ponta Porã' });
+    const fut = new Date(Date.now() + 10 * 86_400_000); while (fut.getUTCDay() === 0) fut.setUTCDate(fut.getUTCDate() + 1);
+    const q = { sendDate: fut.toISOString().slice(0, 10), sendTime: '10:00', text: 'p?', options: ['A', 'B'], correct: 0 };
+    // só representantes, sem canais
+    const id = await saveCampaignPlan(mkt, null, { name: 'Só reps', productName: 'P', audience: { regionalIds: [], types: [], distributorIds: [], repIds: [a.id] }, questions: [q] }, true);
+    const rec = await recipientsOfCampaign(id);
+    expect(rec.map((u) => u.id)).toEqual([a.id]);
+    const loaded = await loadCampaignPlan(id);
+    expect(loaded!.plan.audience.repIds).toEqual([a.id]);
+    await expect(saveCampaignPlan(mkt, null, { name: 'Ninguém', productName: 'P', audience: { regionalIds: [], types: [], distributorIds: [], repIds: [] }, questions: [q] }, true)).rejects.toThrow(/canal ou um representante/);
+  });
+});
+
+describe('importação Excel com representantes', () => {
+  it('lê Diretoria/Distrito/Território e envio só para representantes', async () => {
+    const { buildTemplate, parseCampaignWorkbook } = await import('../src/lib/excel');
+    const ExcelJS = (await import('exceljs')).default;
+    const reps = [{ id: 'a', name: 'Ana', diretoria: 'Sul', distrito: 'RS', territorio: 'Passo Fundo' }, { id: 'b', name: 'Beto', diretoria: 'Sul', distrito: 'PR', territorio: 'Cascavel' }, { id: 'c', name: 'Caio', diretoria: 'CO', distrito: 'MS', territorio: 'Dourados' }];
+    const tpl = await buildTemplate([], [], reps);
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load(tpl as unknown as ArrayBuffer);
+    const c = wb.getWorksheet('Campanha')!; c.getCell('B2').value = 'Reps'; c.getCell('B3').value = 'P'; c.getCell('B10').value = 'Não'; c.getCell('B11').value = 'Sim'; c.getCell('B12').value = 'sul';
+    wb.getWorksheet('Jornadas')!.addRow([1, '10/11/2026', '09:00']); wb.getWorksheet('Perguntas')!.addRow([1, 'Q?', 'a', 'b', '', '', 'A']);
+    const r = await parseCampaignWorkbook(Buffer.from(await wb.xlsx.writeBuffer()), [], [], reps);
+    expect(r.errors).toEqual([]); expect(r.plan!.audience.distributorIds).toEqual([]); expect(r.plan!.audience.repIds).toEqual(['a', 'b']);
+    c.getCell('B12').value = 'Norte';
+    const bad = await parseCampaignWorkbook(Buffer.from(await wb.xlsx.writeBuffer()), [], [], reps);
+    expect(bad.errors.join()).toMatch(/Diretoria "Norte"/);
   });
 });

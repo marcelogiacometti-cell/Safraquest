@@ -43,8 +43,8 @@ export async function importarPlanilha(fd: FormData): Promise<{ error?: string; 
   if (file.size > 2_000_000) return { error: 'Arquivo muito grande (máx. 2 MB).' };
   if (!/\.xlsx$/i.test(file.name)) return { error: 'Envie um arquivo .xlsx (modelo baixado no painel).' };
   const { loadImportContext } = await import('@/lib/importCtx'); const { parseCampaignWorkbook } = await import('@/lib/excel');
-  const { regs, dists } = await loadImportContext();
-  const r = await parseCampaignWorkbook(Buffer.from(await file.arrayBuffer()), regs, dists);
+  const { regs, dists, reps } = await loadImportContext();
+  const r = await parseCampaignWorkbook(Buffer.from(await file.arrayBuffer()), regs, dists, reps);
   return r.plan ? { plan: r.plan, warnings: r.warnings } : { errors: r.errors, warnings: r.warnings };
 }
 
@@ -180,14 +180,14 @@ export async function criarUsuario(_: unknown, fd: FormData) {
   const { actor } = await requirePanel(['MARKETING', 'GESTOR']);
   const r = await wrap(() => admin.createUserManually(actor, {
     name: s(fd, 'nome'), email: s(fd, 'email'), role: s(fd, 'papel') as never, distributorId: s(fd, 'distribuidor') || null, unitId: s(fd, 'filial') || null,
-    password: String(fd.get('senha') ?? ''), consent: fd.get('consent') === 'on' }));
+    password: String(fd.get('senha') ?? ''), consent: fd.get('consent') === 'on', diretoria: s(fd, 'diretoria'), distrito: s(fd, 'distrito'), territorio: s(fd, 'territorio') }));
   revalidatePath('/painel/usuarios');
   if (r.error) return r;
   return { ok: r.data?.notified ? 'Usuário cadastrado e avisado por e-mail.' : 'Usuário cadastrado. Ele já pode entrar com o e-mail cadastrado.' };
 }
 export async function editarUsuario(_: unknown, fd: FormData) {
   const { actor } = await requirePanel(['MARKETING', 'GESTOR']);
-  const r = await wrap(() => admin.updateUser(actor, s(fd, 'id'), { name: s(fd, 'nome'), email: s(fd, 'email'), distributorId: s(fd, 'distribuidor') || null, unitId: s(fd, 'filial') || null, active: s(fd, 'status') === 'ACTIVE' }));
+  const r = await wrap(() => admin.updateUser(actor, s(fd, 'id'), { name: s(fd, 'nome'), email: s(fd, 'email'), distributorId: s(fd, 'distribuidor') || null, unitId: s(fd, 'filial') || null, active: s(fd, 'status') === 'ACTIVE', diretoria: s(fd, 'diretoria'), distrito: s(fd, 'distrito'), territorio: s(fd, 'territorio') }));
   revalidatePath('/painel/usuarios'); return r.error ? r : { ok: 'Usuário atualizado.' };
 }
 export async function excluirUsuario(_: unknown, fd: FormData) {

@@ -15,6 +15,13 @@
       "when": 1793966605447,
       "tag": "0001_fuzzy_silhouette",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793999107054,
+      "tag": "0002_polite_maddog",
+      "breakpoints": true
     }
   ]
 }

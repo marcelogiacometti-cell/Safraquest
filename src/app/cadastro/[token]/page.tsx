@@ -3,6 +3,7 @@ import { db, schema } from '@/db';
 import { checkInvite } from '@/lib/auth';
 import { Form } from '../../forms';
 import { cadastrar } from '../../actions';
+import { RepOrg } from '@/app/painel/usuarios/campos';
 export default async function Cadastro({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const c = await checkInvite(token);
@@ -13,6 +14,7 @@ export default async function Cadastro({ params }: { params: Promise<{ token: st
   const [d] = inv.distributorId ? await db.select().from(schema.distributors).where(eq(schema.distributors.id, inv.distributorId)) : [];
   const isSeller = inv.targetRole === 'VENDEDOR';
   const units = isSeller && inv.distributorId && !inv.unitId ? (await db.select().from(schema.units).where(eq(schema.units.distributorId, inv.distributorId))).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')) : [];
+  const tree = inv.targetRole === 'REPRESENTANTE' ? (await db.select().from(schema.users)).filter((u) => u.role === 'REPRESENTANTE' && u.diretoria && u.distrito && u.territorio).map((u) => ({ diretoria: u.diretoria!, distrito: u.distrito!, territorio: u.territorio! })) : [];
   const [fixed] = isSeller && inv.unitId ? await db.select().from(schema.units).where(eq(schema.units.id, inv.unitId)) : [];
   return (<main className="wrap">
     <h1>Cadastro no SafraQuest</h1>
@@ -23,6 +25,7 @@ export default async function Cadastro({ params }: { params: Promise<{ token: st
       <label>Nome e sobrenome<input name="nome" autoComplete="name" required /></label>
       <label>E-mail<input name="email" type="email" autoComplete="email" required /></label>
       {(inv.targetRole === 'GESTOR' || inv.targetRole === 'MARKETING') && <><label>Crie uma senha (mín. 8 caracteres)<input name="senha" type="password" autoComplete="new-password" minLength={8} required /></label></>}
+      {inv.targetRole === 'REPRESENTANTE' && <RepOrg tree={tree} />}
       {fixed && <label>Filial / unidade<input value={fixed.name} readOnly disabled /></label>}
       {isSeller && !fixed && units.length === 0 && <div className="err">Este link não tem filial cadastrada. Peça um novo link ao seu gestor.</div>}
       {units.length > 0 && <label>Filial / unidade onde você trabalha<select name="unidade" required defaultValue=""><option value="" disabled>Escolha…</option>{units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></label>}

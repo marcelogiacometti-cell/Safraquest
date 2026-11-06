@@ -14,10 +14,28 @@ export function DistUnit({ dists, units, dist: d0 = '', unit: u0 = '', requireUn
   </>);
 }
 
+export type OrgNode = { diretoria: string; distrito: string; territorio: string };
+/** Diretoria › Distrito › Território: cada nível sugere o que já existe no nível acima, mas aceita um nome novo. */
+export function RepOrg({ tree, v = {} }: { tree: OrgNode[]; v?: Partial<OrgNode> }) {
+  const [dir, setDir] = useState(v.diretoria ?? ''); const [dis, setDis] = useState(v.distrito ?? ''); const [ter, setTer] = useState(v.territorio ?? '');
+  const uniq = (a: string[]) => [...new Set(a.filter(Boolean))].sort((x, y) => x.localeCompare(y, 'pt-BR'));
+  const dirs = uniq(tree.map((t) => t.diretoria));
+  const diss = uniq(tree.filter((t) => !dir || t.diretoria.toLowerCase() === dir.trim().toLowerCase()).map((t) => t.distrito));
+  const ters = uniq(tree.filter((t) => (!dir || t.diretoria.toLowerCase() === dir.trim().toLowerCase()) && (!dis || t.distrito.toLowerCase() === dis.trim().toLowerCase())).map((t) => t.territorio));
+  return (<>
+    <label>Diretoria<input name="diretoria" list="dl-dir" value={dir} onChange={(e) => setDir(e.target.value)} required autoComplete="off" /></label>
+    <label>Distrito<input name="distrito" list="dl-dis" value={dis} onChange={(e) => setDis(e.target.value)} required autoComplete="off" /></label>
+    <label>Território<input name="territorio" list="dl-ter" value={ter} onChange={(e) => setTer(e.target.value)} required autoComplete="off" /></label>
+    <datalist id="dl-dir">{dirs.map((x) => <option key={x} value={x} />)}</datalist>
+    <datalist id="dl-dis">{diss.map((x) => <option key={x} value={x} />)}</datalist>
+    <datalist id="dl-ter">{ters.map((x) => <option key={x} value={x} />)}</datalist>
+  </>);
+}
+
 const ROLES: Record<string, string> = { VENDEDOR: 'Vendedor', GESTOR: 'Gestor (distribuidor)', REPRESENTANTE: 'Representante Corteva', MARKETING: 'Marketing (acesso total)' };
 
 /** Categoria + vínculo + senha (só gestor e Marketing usam senha). */
-export function RoleFields({ roles, dists, units, fixedDist }: { roles: string[]; dists: D[]; units: U[]; fixedDist?: string }) {
+export function RoleFields({ roles, dists, units, fixedDist, tree = [] }: { roles: string[]; dists: D[]; units: U[]; fixedDist?: string; tree?: OrgNode[] }) {
   const [role, setRole] = useState(roles[0]);
   const org = role === 'VENDEDOR' || role === 'GESTOR';
   return (<>
@@ -25,6 +43,7 @@ export function RoleFields({ roles, dists, units, fixedDist }: { roles: string[]
     {org && (fixedDist ? <><input type="hidden" name="distribuidor" value={fixedDist} />
       <label>Filial<select name="filial" required={role === 'VENDEDOR'} defaultValue=""><option value="">Escolha…</option>{units.filter((u) => u.distributorId === fixedDist).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></label></>
       : <DistUnit key={role} dists={dists} units={units} requireUnit={role === 'VENDEDOR'} />)}
+    {role === 'REPRESENTANTE' && <RepOrg tree={tree} />}
     {(role === 'GESTOR' || role === 'MARKETING') && <label>Senha inicial (mín. 8 caracteres)<input name="senha" type="password" minLength={8} autoComplete="new-password" /></label>}
   </>);
 }

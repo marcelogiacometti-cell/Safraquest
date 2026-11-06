@@ -20,7 +20,8 @@ const flat = (js: J[]): PlanQuestion[] => js.flatMap((j) => j.qs.map((q) => ({ .
 type Reg = { id: string; name: string }; type Dist = { id: string; name: string; type: 'COOPERATIVA' | 'REVENDA'; regionalId: string; sellers: number };
 const TYPES: ['COOPERATIVA' | 'REVENDA', string][] = [['COOPERATIVA', 'Cooperativas'], ['REVENDA', 'Revendas']];
 
-export function Builder({ regionals, dists, initial, campaignId }: { regionals: Reg[]; dists: Dist[]; initial: CampaignPlanInput; campaignId: string | null }) {
+type Rep = { id: string; name: string; diretoria: string; distrito: string; territorio: string };
+export function Builder({ regionals, dists, reps, initial, campaignId }: { regionals: Reg[]; dists: Dist[]; reps: Rep[]; initial: CampaignPlanInput; campaignId: string | null }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [f, setF] = useState({ name: initial.name, productName: initial.productName, objective: initial.objective ?? '', materialUrl: initial.materialUrl ?? '', speedBonus: !!initial.speedBonus });
@@ -28,6 +29,11 @@ export function Builder({ regionals, dists, initial, campaignId }: { regionals: 
   const [types, setTypes] = useState<('COOPERATIVA' | 'REVENDA')[]>(initial.audience.types);
   const [picked, setPicked] = useState<string[]>(initial.audience.distributorIds);
   const [find, setFind] = useState('');
+  const [dirs, setDirs] = useState<string[]>(initial.audience.diretorias ?? []);
+  const [diss, setDiss] = useState<string[]>(initial.audience.distritos ?? []);
+  const [ters, setTers] = useState<string[]>(initial.audience.territorios ?? []);
+  const [repPicked, setRepPicked] = useState<string[]>(initial.audience.repIds ?? []);
+  const [findRep, setFindRep] = useState('');
   const [js, setJs] = useState<J[]>(groupJ(initial.questions));
   const [editing, setEditing] = useState<{ j: number; idx: number | null; q: PlanQuestion } | null>(null);
   const [editJ, setEditJ] = useState<{ idx: number | null; sendDate: string; sendTime: string } | null>(null);
@@ -46,8 +52,9 @@ export function Builder({ regionals, dists, initial, campaignId }: { regionals: 
       if (!r.plan) return setImp({ errors: r.errors, warnings: r.warnings });
       const pl = r.plan;
       setF({ name: pl.name, productName: pl.productName, objective: pl.objective ?? '', materialUrl: pl.materialUrl ?? '', speedBonus: !!pl.speedBonus });
-      setRegs(pl.audience.regionalIds); setTypes(pl.audience.types); setPicked(pl.audience.distributorIds); setJs(groupJ(pl.questions));
-      setImp({ warnings: r.warnings, ok: `Planilha importada: ${pl.questions.length} pergunta(s) e ${pl.audience.distributorIds.length} canal(is). Revise abaixo e clique em Finalizar campanha.` });
+      setRegs(pl.audience.regionalIds); setTypes(pl.audience.types); setPicked(pl.audience.distributorIds);
+      setDirs(pl.audience.diretorias ?? []); setDiss(pl.audience.distritos ?? []); setTers(pl.audience.territorios ?? []); setRepPicked(pl.audience.repIds ?? []); setJs(groupJ(pl.questions));
+      setImp({ warnings: r.warnings, ok: `Planilha importada: ${pl.questions.length} pergunta(s), ${pl.audience.distributorIds.length} canal(is) e ${(pl.audience.repIds ?? []).length} representante(s). Revise abaixo e clique em Finalizar campanha.` });
     });
   }
 
@@ -81,7 +88,17 @@ export function Builder({ regionals, dists, initial, campaignId }: { regionals: 
   const reselect = (r: string[], t: ('COOPERATIVA' | 'REVENDA')[]) => setPicked(dists.filter((d) => (!r.length || r.includes(d.regionalId)) && (!t.length || t.includes(d.type))).map((d) => d.id));
   const toggleReg = (id: string) => { const r = regs.includes(id) ? regs.filter((x) => x !== id) : [...regs, id]; setRegs(r); reselect(r, types); };
   const toggleType = (t: 'COOPERATIVA' | 'REVENDA') => { const n = types.includes(t) ? types.filter((x) => x !== t) : [...types, t]; setTypes(n); reselect(regs, n); };
-  const plan = (): CampaignPlanInput => ({ ...f, audience: { regionalIds: regs, types, distributorIds: picked }, questions: qs });
+  // representantes Corteva: Diretoria › Distrito › Território, também encadeados
+  const uq = (a: string[]) => [...new Set(a.filter(Boolean))].sort((x, y) => x.localeCompare(y, 'pt-BR'));
+  const repIn = (r: Rep, d: string[], s: string[], t: string[]) => (!d.length || d.includes(r.diretoria)) && (!s.length || s.includes(r.distrito)) && (!t.length || t.includes(r.territorio));
+  const repMatching = reps.filter((r) => repIn(r, dirs, diss, ters));
+  const repVisible = repMatching.filter((r) => !findRep.trim() || r.name.toLowerCase().includes(findRep.trim().toLowerCase()));
+  const repReselect = (d: string[], s: string[], t: string[]) => setRepPicked(reps.filter((r) => repIn(r, d, s, t)).map((r) => r.id));
+  const tog = (a: string[], v: string) => (a.includes(v) ? a.filter((x) => x !== v) : [...a, v]);
+  const toggleDir = (v: string) => { const d = tog(dirs, v); const s = diss.filter((x) => reps.some((r) => (!d.length || d.includes(r.diretoria)) && r.distrito === x)); const t = ters.filter((x) => reps.some((r) => (!d.length || d.includes(r.diretoria)) && (!s.length || s.includes(r.distrito)) && r.territorio === x)); setDirs(d); setDiss(s); setTers(t); repReselect(d, s, t); };
+  const toggleDis = (v: string) => { const s = tog(diss, v); const t = ters.filter((x) => reps.some((r) => (!dirs.length || dirs.includes(r.diretoria)) && (!s.length || s.includes(r.distrito)) && r.territorio === x)); setDiss(s); setTers(t); repReselect(dirs, s, t); };
+  const toggleTer = (v: string) => { const t = tog(ters, v); setTers(t); repReselect(dirs, diss, t); };
+  const plan = (): CampaignPlanInput => ({ ...f, audience: { regionalIds: regs, types, distributorIds: picked, diretorias: dirs, distritos: diss, territorios: ters, repIds: repPicked }, questions: qs });
   function save(finalize: boolean) {
     setErr('');
     start(async () => {
@@ -96,7 +113,7 @@ export function Builder({ regionals, dists, initial, campaignId }: { regionals: 
     if (!js.length) return setErr('Crie pelo menos uma jornada.');
     const empty = js.findIndex((j) => !j.qs.length);
     if (empty >= 0) return setErr(`A jornada ${empty + 1} está sem perguntas. Adicione perguntas ou exclua a jornada.`);
-    if (!picked.length) return setErr('Escolha pelo menos um canal para receber a campanha.');
+    if (!picked.length && !repPicked.length) return setErr('Escolha pelo menos um canal ou um representante para receber a campanha.');
     setSummary(true);
   }
   const set = (k: keyof typeof f, v: string | boolean) => setF({ ...f, [k]: v });
@@ -141,6 +158,28 @@ export function Builder({ regionals, dists, initial, campaignId }: { regionals: 
           <input type="checkbox" checked={picked.includes(d.id)} style={{ width: 'auto', margin: 0 }} onChange={(e) => setPicked(e.target.checked ? [...picked, d.id] : picked.filter((x) => x !== d.id))} />
           <span style={{ flex: 1 }}>{d.name}</span><span className="mu">{regionals.find((r) => r.id === d.regionalId)?.name} · {d.type === 'COOPERATIVA' ? 'Cooperativa' : 'Revenda'} · {d.sellers} vendedor(es)</span></label>)}</div>
       <p style={{ margin: '10px 0 0' }}><b>{chosen.length}</b> canal(is) selecionado(s) · <b>{reach}</b> vendedor(es) ativo(s) hoje</p></div>
+
+    <div className="card"><h2>Representantes Corteva</h2>
+      <p className="mu">Mesmo modelo dos canais: escolha a Diretoria, depois o Distrito e o Território, e marque quem recebe. Sem ninguém marcado, nenhum representante recebe a campanha.</p>
+      {!reps.length ? <p className="mu">Nenhum representante ativo cadastrado ainda (Usuários › Adicionar usuários).</p> : <>
+      <div style={{ fontWeight: 600, fontSize: 14, margin: '8px 0 4px' }}>1. Diretoria <span className="mu" style={{ fontWeight: 400 }}>(nenhuma marcada = todas)</span></div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{uq(reps.map((r) => r.diretoria)).map((v) => <button key={v} type="button" onClick={() => toggleDir(v)} className={'btn sm' + (dirs.includes(v) ? '' : ' sec')}>{v} · {reps.filter((r) => r.diretoria === v).length}</button>)}</div>
+      <div style={{ fontWeight: 600, fontSize: 14, margin: '14px 0 4px' }}>2. Distrito <span className="mu" style={{ fontWeight: 400 }}>(nenhum marcado = todos)</span></div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{uq(reps.filter((r) => !dirs.length || dirs.includes(r.diretoria)).map((r) => r.distrito)).map((v) => <button key={v} type="button" onClick={() => toggleDis(v)} className={'btn sm' + (diss.includes(v) ? '' : ' sec')}>{v}</button>)}</div>
+      <div style={{ fontWeight: 600, fontSize: 14, margin: '14px 0 4px' }}>3. Território <span className="mu" style={{ fontWeight: 400 }}>(nenhum marcado = todos)</span></div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{uq(reps.filter((r) => (!dirs.length || dirs.includes(r.diretoria)) && (!diss.length || diss.includes(r.distrito))).map((r) => r.territorio)).map((v) => <button key={v} type="button" onClick={() => toggleTer(v)} className={'btn sm' + (ters.includes(v) ? '' : ' sec')}>{v}</button>)}</div>
+      <div className="row" style={{ margin: '14px 0 4px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ fontWeight: 600, fontSize: 14 }}>4. Representantes <span className="mu" style={{ fontWeight: 400 }}>— {repMatching.length} na seleção</span></div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input value={findRep} onChange={(e) => setFindRep(e.target.value)} placeholder="Buscar pelo nome" style={{ margin: 0, width: 200 }} />
+          <button type="button" className="btn sm sec" onClick={() => setRepPicked([...new Set([...repPicked, ...repVisible.map((r) => r.id)])])}>Marcar todos</button>
+          <button type="button" className="btn sm sec" onClick={() => setRepPicked(repPicked.filter((id) => !repVisible.some((r) => r.id === id)))}>Limpar</button></div></div>
+      <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid var(--bd)', borderRadius: 10, padding: '4px 12px' }}>
+        {!repVisible.length && <p className="mu">Nenhum representante nesta seleção.</p>}
+        {repVisible.map((r) => <label key={r.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 400, padding: '5px 0' }}>
+          <input type="checkbox" checked={repPicked.includes(r.id)} style={{ width: 'auto', margin: 0 }} onChange={(e) => setRepPicked(e.target.checked ? [...repPicked, r.id] : repPicked.filter((x) => x !== r.id))} />
+          <span style={{ flex: 1 }}>{r.name}</span><span className="mu">{r.diretoria} › {r.distrito} › {r.territorio}</span></label>)}</div></>}
+      <p style={{ margin: '10px 0 0' }}><b>{repPicked.length}</b> representante(s) selecionado(s)</p></div>
 
     <div className="card"><div className="row"><h2>Jornadas ({js.length})</h2>
       <button type="button" className="btn sm" onClick={() => { setJErr(''); setEditJ({ idx: null, sendDate: '', sendTime: '09:00' }); }}>＋ Nova jornada</button></div>
@@ -188,7 +227,7 @@ export function Builder({ regionals, dists, initial, campaignId }: { regionals: 
     {summary && <div className="ovl"><div className="box" style={{ maxWidth: 640 }}>
       <h2 style={{ marginTop: 0 }}>Resumo da campanha</h2>
       <p><b>{f.name}</b><br /><span className="mu">Tema: {f.productName}{f.objective ? ` · ${f.objective}` : ''}</span></p>
-      <p className="mu">Recebem: {chosen.length} canal(is), {reach} vendedor(es) ativo(s){regs.length ? ` · região: ${regs.map((id) => regionals.find((r) => r.id === id)?.name).join(', ')}` : ' · todas as regiões'}{types.length ? ` · ${types.map((t) => (t === 'COOPERATIVA' ? 'cooperativas' : 'revendas')).join(' e ')}` : ' · cooperativas e revendas'}</p>
+      <p className="mu">Recebem: {repPicked.length} representante(s) Corteva · {chosen.length} canal(is), {reach} vendedor(es) ativo(s){regs.length ? ` · região: ${regs.map((id) => regionals.find((r) => r.id === id)?.name).join(', ')}` : ' · todas as regiões'}{types.length ? ` · ${types.map((t) => (t === 'COOPERATIVA' ? 'cooperativas' : 'revendas')).join(' e ')}` : ' · cooperativas e revendas'}</p>
       <p className="mu">Bônus de velocidade: {f.speedBonus ? 'sim' : 'não'}</p>
       <h2>{js.length} jornada(s) · {qs.length} pergunta(s)</h2>
       <table><tbody>{js.map((j, i) => <tr key={i}><td>Jornada {i + 1}</td><td>{weekday(j.sendDate)} {fmtDay(j.sendDate)} às {j.sendTime}</td><td>{j.qs.length} pergunta(s)</td></tr>)}</tbody></table>

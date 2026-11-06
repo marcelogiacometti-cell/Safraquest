@@ -48,6 +48,7 @@ export const users = pgTable('users', {
   distributorId: text('distributor_id').references(() => distributors.id),
   unitId: text('unit_id').references(() => units.id),
   regionalId: text('regional_id').references(() => regionals.id),
+  diretoria: text('diretoria'), distrito: text('distrito'), territorio: text('territorio'), // estrutura comercial Corteva (representantes)
   invitedVia: text('invited_via'),
   consentAt: timestamp('consent_at', { withTimezone: true }),
   optOutAt: timestamp('opt_out_at', { withTimezone: true }),
@@ -114,7 +115,7 @@ export const campaigns = pgTable('campaigns', {
   productName: text('product_name').notNull(),
   objective: text('objective'),
   materialUrl: text('material_url'),
-  audience: jsonb('audience').$type<{ regionalIds: string[]; types: string[] }>(),
+  audience: jsonb('audience').$type<{ regionalIds: string[]; types: string[]; diretorias?: string[]; distritos?: string[]; territorios?: string[]; repIds?: string[] }>(),
   startDate: timestamp('start_date', { withTimezone: true }),
   endDate: timestamp('end_date', { withTimezone: true }),
   everyWeeks: integer('every_weeks').notNull().default(1),
